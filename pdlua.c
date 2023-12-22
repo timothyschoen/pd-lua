@@ -753,11 +753,35 @@ void plugdata_forward_message(void* x, t_symbol *s, int argc, t_atom *argv);
 /** Here we find the lua code for the object and open it in an editor */
 static void pdlua_menu_open(t_pdlua *o)
 {
+    // This extra search will make sure files that were opened with "load $1" can also be found
+    // Might be worth it to enable it for other pd flavors too?
+#if PLUGDATA
+        lua_getglobal(__L, "pd");
+        lua_getfield(__L, -1, "_whereami");
+        lua_pushstring(__L,  o->pd.te_pd->c_name->s_name);
+    
+        if (lua_pcall(__L, 1, 1, 0))
+        {
+            pd_error(NULL, "lua: error in whereami:\n%s", lua_tostring(__L, -1));
+            lua_pop(__L, 2); /* pop the error string and the global "pd" */
+            return;
+        }
+        if(lua_isstring(__L, -1)) {
+            const char* fullpath = luaL_checkstring(__L, -1);
+            if(fullpath) {
+                t_atom arg;
+                SETSYMBOL(&arg, gensym(fullpath));
+                plugdata_forward_message(o, gensym("open_textfile"), 1, &arg);
+            }
+            return;
+        }
+#endif
+    
     const char  *name;
     const char  *path;
     char        pathname[FILENAME_MAX];
     t_class     *class;
-
+    
     PDLUA_DEBUG("pdlua_menu_open stack top is %d", lua_gettop(__L));
     /** Get the scriptname of the object */
     lua_getglobal(__L, "pd");
@@ -805,6 +829,7 @@ static void pdlua_menu_open(t_pdlua *o)
 #else
         logpost(NULL, 3, "Opening %s for editing", pathname);
 #endif
+            
 #if PLUGDATA
         t_atom arg;
         SETSYMBOL(&arg, gensym(pathname));

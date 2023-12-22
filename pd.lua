@@ -20,11 +20,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 -- storage for Pd C<->Lua interaction
 pd._classes = { } -- take absolute paths and turn them into classes
+pd._fullpaths = { }
 pd._pathnames = { } -- look up absolute path by creation name
 pd._objects = { }
 pd._clocks = { }
 pd._receives = { }
 pd._loadpath = ""
+pd._currentpath = ""
 
 -- add a path to Lua's "require" search paths
 pd._setrequirepath = function(path)
@@ -117,6 +119,15 @@ pd._whoami = function (object)
   if nil ~= pd._objects[object] then
     return pd._objects[object]:whoami()
   end
+end
+
+--whereami method dispatcher
+pd._whereami = function(name)
+    if nil ~= pd._fullpaths[name] then
+      return pd._fullpaths[name]
+    end
+    
+    return nil
 end
 
 --class method dispatcher
@@ -290,10 +301,19 @@ function pd.Class:register(name)
   else
     regname = name
   end
+  
+  --pd._fullpaths[regname] = pd._currentpath or (fullname .. ".pd_lua")
+  if pd._currentpath == nil or pd._currentpath == '' then
+    pd._fullpaths[regname] = fullname .. ".pd_lua"
+  else
+    pd._fullpaths[regname] = pd._currentpath
+  end
+
   pd._pathnames[regname] = fullname
   pd._classes[fullname] = self       -- record registration
   self._class = pd._register(name)  -- register new class
   self._name = name
+  self._path = pd._fullpaths[regname]
   self._loadpath = fullpath
   if name == "pdlua" then
     self._scriptname = "pd.lua"
@@ -385,6 +405,7 @@ function pd.Class:dofilex(file)
   local pathsave = pd._loadpath
   pd._loadname = nil
   pd._loadpath = self._loadpath
+  pd._currentpath = file
   local f, path = pd._dofilex(self._class, file)
   pd._loadname = namesave
   pd._loadpath = pathsave
@@ -399,6 +420,7 @@ function pd.Class:dofile(file)
   local pathsave = pd._loadpath
   pd._loadname = nil
   pd._loadpath = self._loadpath
+  pd._currentpath = file
   local f, path = pd._dofile(self._object, file)
   pd._loadname = namesave
   pd._loadpath = pathsave
@@ -411,6 +433,10 @@ end
 
 function pd.Class:whoami()
   return self._scriptname or self._name
+end
+
+function pd.Class:in_1__reload()
+  self:dofile(self._path)
 end
 
 function pd.Class:get_class() -- accessor for t_class*
@@ -429,7 +455,6 @@ end
 function lua:in_1_load(atoms)  -- execute a script
   self:dofile(atoms[1])
 end
-
 
 local luax = pd.Class:new():register("pdluax")  -- classless lua externals (like [pdluax foo])
 
