@@ -62,7 +62,6 @@ int wrap_hostfontsize(int fontsize, int zoom)
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-
 // Functions that need to be implemented separately for each Pd flavour
 static int gfx_initialize(t_pdlua *obj);
 
@@ -1031,6 +1030,7 @@ static int draw_text(lua_State* L) {
             "-fill", gfx->current_color,
             "-justify", "left");
 
+    post("coords1");
     pdgui_vmess(0, "crs ii", cnv, "coords", tags[1], x, y);
 
     return 0;
@@ -1059,6 +1059,7 @@ static int stroke_path(lua_State* L) {
 
     float last_x, last_y;
 
+    post("coords2");
     sys_vgui(".x%lx.c coords %s", cnv, tags[1]);
     for (int i = 0; i < path->num_path_segments; i++) {
         float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
@@ -1096,6 +1097,7 @@ static int fill_path(lua_State* L) {
 
     float last_x, last_y;
 
+    post("coords3");
     sys_vgui(".x%lx.c coords %s", cnv, tags[1]);
     for (int i = 0; i < path->num_path_segments; i++) {
         float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];

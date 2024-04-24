@@ -39,7 +39,8 @@ luaflags += -DLUA_USE_WINDOWS
 endef
 endif
 
-cflags = ${luaflags} -DPDLUA_VERSION="$(pdlua_version)"
+cflags =  -arch x86_64 ${luaflags} -DPDLUA_VERSION="$(pdlua_version)"
+ldflags =  -arch x86_64
 
 pdlua.class.sources := pdlua.c $(luasrc)
 pdlua.class.ldlibs := $(lualibs)
