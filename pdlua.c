@@ -1886,7 +1886,7 @@ static int pdlua_clock_free(lua_State *L)
 
 static int pdlua_systime(lua_State *L)
 {
-    lua_pushnumber(L, clock_getsystime());
+    lua_pushnumber(L, clock_getlogicaltime());
     return 1;
 }
 
