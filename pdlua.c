@@ -136,6 +136,19 @@ void initialise_lua_state()
 
 #endif
 
+// class_new class names need to use gensym of the global pure-data instance
+t_symbol* global_gensym(char* s)
+{
+#ifdef PDINSTANCE
+    t_pdinstance* last_instance = pd_get_instance();
+    pd_set_instance(&pd_maininstance);
+#endif
+    t_symbol* sym = gensym(s);
+#ifdef PDINSTANCE
+    pd_set_instance(last_instance);
+#endif
+    return sym;
+}
 
 #if PD_MAJOR_VERSION == 0
 # if PD_MINOR_VERSION >= 41
@@ -418,7 +431,7 @@ static void pdlua_proxyinlet_init
 /** Register the proxy inlet class with Pd. */
 static void pdlua_proxyinlet_setup(void)
 {
-    pdlua_proxyinlet_class = class_new(gensym("pdlua proxy inlet"), 0, 0, sizeof(t_pdlua_proxyinlet), 0, 0);
+    pdlua_proxyinlet_class = class_new(global_gensym("pdlua proxy inlet"), 0, 0, sizeof(t_pdlua_proxyinlet), 0, 0);
     if (pdlua_proxyinlet_class) {
         class_addanything(pdlua_proxyinlet_class, pdlua_proxyinlet_anything);
         class_addmethod(pdlua_proxyinlet_class, (t_method)pdlua_proxyinlet_fwd, gensym("fwd"), A_GIMME, 0);
@@ -464,7 +477,7 @@ static void pdlua_proxyreceive_free(t_pdlua_proxyreceive *r /**< The proxy recei
 /** Register the proxy receive class with Pd. */
 static void pdlua_proxyreceive_setup()
 {
-    pdlua_proxyreceive_class = class_new(gensym("pdlua proxy receive"), 0, 0, sizeof(t_pdlua_proxyreceive), 0, 0);
+    pdlua_proxyreceive_class = class_new(global_gensym("pdlua proxy receive"), 0, 0, sizeof(t_pdlua_proxyreceive), 0, 0);
     if (pdlua_proxyreceive_class)
         class_addanything(pdlua_proxyreceive_class, pdlua_proxyreceive_anything);
 }
@@ -491,7 +504,7 @@ static t_pdlua_proxyclock *pdlua_proxyclock_new
 /** Register the proxy clock class with Pd. */
 static void pdlua_proxyclock_setup(void)
 {
-    pdlua_proxyclock_class = class_new(gensym("pdlua proxy clock"), 0, 0, sizeof(t_pdlua_proxyclock), 0, 0);
+    pdlua_proxyclock_class = class_new(global_gensym("pdlua proxy clock"), 0, 0, sizeof(t_pdlua_proxyclock), 0, 0);
 }
 
 /** Dump an array of atoms into a Lua table. */
@@ -1353,16 +1366,17 @@ static int pdlua_class_new(lua_State *L)
         // fail silently, return nothing
         return 0;
     }
+    
     snprintf(name_gfx, MAXPDSTRING-1, "%s:gfx", name);
     PDLUA_DEBUG3("pdlua_class_new: L is %p, name is %s stack top is %d", L, name, lua_gettop(L));
-    c = class_new(gensym((char *) name), (t_newmethod) pdlua_new,
+    c = class_new(global_gensym((char *) name), (t_newmethod) pdlua_new,
         (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
     if (strcmp(name, "pdlua") && strcmp(name, "pdluax")) {
         // Shadow class for graphics objects. This is an exact clone of the
         // regular (non-gui) class, except that it has a different
         // widgetbehavior. We only need this for the regular Lua objects, the
         // pdlua and pdluax built-ins don't have this.
-        c_gfx = class_new(gensym((char *) name_gfx), (t_newmethod) pdlua_new,
+        c_gfx = class_new(global_gensym((char *) name_gfx), (t_newmethod) pdlua_new,
                 (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
         class_sethelpsymbol(c_gfx, gensym((char *) name));
     }
@@ -1746,7 +1760,7 @@ static int pdlua_receive_new(lua_State *L)
             const char *name = luaL_checkstring(L, 2);
             if (name)
             {
-                t_pdlua_proxyreceive *r =  pdlua_proxyreceive_new(o, gensym((char *) name)); /* const cast */
+                t_pdlua_proxyreceive *r =  pdlua_proxyreceive_new(o, global_gensym((char *) name)); /* const cast */
                 lua_pushlightuserdata(L, r);
                 PDLUA_DEBUG("pdlua_receive_new: success end. stack top is %d", lua_gettop(L));
                 return 1;
