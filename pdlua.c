@@ -112,10 +112,15 @@ void initialise_lua_state()
         iter = iter->next;
     }
     
+    lua_checkstack(lua_threads->state, 1);
+    
     iter->next = t_getbytes(sizeof(lua_Instance));
     iter->next->pd_instance = pd_this;
     iter->next->state = lua_newthread(lua_threads->state);
     iter->next->next = NULL;
+    
+    // TODO: lua state will leak, we should clean it up somewhere
+    //axluaL_ref(lua_threads->state, LUA_REGISTRYINDEX);
 }
 
 #else
@@ -634,7 +639,7 @@ static t_pdlua *pdlua_new
             return NULL;
         }
     }
-        
+    
     PDLUA_DEBUG("pdlua_new: start with stack top %d", lua_gettop(__L()));
     lua_getglobal(__L(), "pd");
     lua_getfield(__L(), -1, "_checkbase");
