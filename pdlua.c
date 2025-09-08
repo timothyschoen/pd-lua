@@ -672,7 +672,7 @@ static t_pdlua *pdlua_new
             PDLUA_DEBUG("pdlua_new (basename load) path is %s", buf);
             //pdlua_setpathname(o, buf);/* change the scriptname to include its path 
             pdlua_setrequirepath(__L(), buf);
-            class_set_extern_dir(gensym(buf));
+            class_set_extern_dir(global_gensym(buf));
             strncpy(buf, s->s_name, MAXPDSTRING - 8);
             strcat(buf, ".pd_lua");
             reader.fd = fd;
@@ -2850,7 +2850,7 @@ static int pdlua_loader_fromfd
     t_pdlua_readerdata  reader;
 
     PDLUA_DEBUG("pdlua_loader: stack top %d", lua_gettop(__L()));
-    class_set_extern_dir(gensym(dirbuf));
+    class_set_extern_dir(global_gensym(dirbuf));
     pdlua_setrequirepath(__L(), dirbuf);
     reader.fd = fd;
     // we want to have the filename with extension as the name of the chunk
