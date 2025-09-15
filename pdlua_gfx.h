@@ -477,6 +477,7 @@ static int draw_svg(lua_State* L) {
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
 
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_svg"), 3, args);
+    return 0;
 }
 
 static int stroke_path(lua_State* L) {
