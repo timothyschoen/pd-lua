@@ -266,7 +266,7 @@ static int get_size(lua_State* L)
 
 // we make this global because paths are disconnected from object, but still need to send messages to plugdata
 // it really doesn't matter since all these function callbacks point to the same function anyway
-static void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*) = NULL;
+static PERTHREAD void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*) = NULL;
 
 // Wrapper around draw callback to plugdata
 static inline void plugdata_draw(t_pdlua *obj, int layer, t_symbol* sym, int argc, t_atom* argv)
