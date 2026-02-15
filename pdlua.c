@@ -63,12 +63,12 @@ typedef void (*t_signal_setmultiout)(t_signal **, int);
 static t_signal_setmultiout g_signal_setmultiout;
 
 // This used to be in s_stuff.h, but not anymore since 0.55.1test1.
-int sys_trytoopenone(const char *dir, const char *name, const char* ext,
+int open_via_path(const char *dir, const char *name, const char* ext,
     char *dirresult, char **nameresult, unsigned int size, int bin);
 
 // Check for absolute filenames in the second argument. Otherwise,
 // sys_trytoopenone will happily prepend the given path anyway.
-#define trytoopenone(dir, name, ...) sys_trytoopenone(sys_isabsolutepath(name) ? "" : dir, name, __VA_ARGS__)
+#define trytoopenone(dir, name, ...) open_via_path(sys_isabsolutepath(name) ? "" : dir, name, __VA_ARGS__)
 
 #ifdef PDINSTANCE
 
@@ -1332,7 +1332,7 @@ static int pdlua_set_arguments(lua_State *L)
             if (redraw) {
                 // update the text in the object box; this makes sure that
                 // the arguments in the display are what we just set
-                t_rtext *y = glist_findrtext(o->canvas, x);
+                t_rtext *y = glist_getrtext(o->canvas, x, 0);
                 rtext_retext(y);
                 // redraw the object and its iolets (including incident
                 // cord lines), in case the object box size has changed
