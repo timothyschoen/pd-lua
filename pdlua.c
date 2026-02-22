@@ -3061,6 +3061,9 @@ void pdlua_setup(void)
     post(luaversionStr);
 
 // multichannel handling copied from https://github.com/Spacechild1/vstplugin/blob/3f0ed8a800ea238bf204a2ead940b2d1324ac909/pd/src/vstplugin~.cpp#L4122-L4136
+#if PLUGDATA
+    g_signal_setmultiout = &signal_setmultiout;
+#else
 #ifdef _WIN32
     // get a handle to the module containing the Pd API functions.
     // NB: GetModuleHandle("pd.dll") does not cover all cases.
@@ -3076,7 +3079,7 @@ void pdlua_setup(void)
     g_signal_setmultiout = (t_signal_setmultiout)dlsym(
         dlopen(NULL, RTLD_NOW), "signal_setmultiout");
 #endif
-
+#endif
     pdlua_proxyinlet_setup();
     PDLUA_DEBUG("pdlua pdlua_proxyinlet_setup done", 0);
     pdlua_proxyreceive_setup();
