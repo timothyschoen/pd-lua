@@ -989,7 +989,7 @@ static void (*nw_gui_vmess)(const char *sel, char *fmt, ...) = NULL;
  This allows opening an in-gui text editor instead of opening another app
  */
 #if PLUGDATA
-void plugdata_forward_message(void* x, t_symbol *s, int argc, t_atom *argv);
+void plugdata_forward_message(int type, void* x, t_symbol *s, int argc, t_atom *argv);
 #endif
 /** a handler for the open item in the right-click menu (mrpeach 20111025) */
 /** Here we find the lua code for the object and open it in an editor */
@@ -1063,7 +1063,7 @@ static void pdlua_menu_open(t_pdlua *o)
 #if PLUGDATA
         t_atom arg;
         SETSYMBOL(&arg, gensym(pathname));
-        plugdata_forward_message(o, gensym("open_textfile"), 1, &arg);
+        plugdata_forward_message(0, o, gensym("open_textfile"), 1, &arg);
 #else
         if (nw_gui_vmess)
           nw_gui_vmess("open_textfile", "s", pathname);
