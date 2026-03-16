@@ -278,7 +278,18 @@ static void pdlua_properties(t_gobj *z, t_glist *owner) {
     char receiver[MAXPDSTRING];
     snprintf(receiver, MAXPDSTRING, ".%p", p);
     pdlua->properties.properties_receiver = gensym(receiver);
+
+    pdgui_vmess(0, "ss", "destroy", pdlua->properties.properties_receiver->s_name);
+
+    if(pdlua->properties.frame_count != 0)
+        pd_unbind(&pdlua->pd.ob_pd, p->properties_receiver);
+
     pdlua->properties.current_frame = NULL;
+    pdlua->properties.frame_count = 0;
+    pdlua->properties.property_count = 0;
+    pdlua->properties.current_row = 0;
+    pdlua->properties.current_col = 0;
+
     pd_bind(&pdlua->pd.ob_pd, p->properties_receiver);
 
     pdlua_properties_createdialog(p); // <-- create hidden window
@@ -451,26 +462,21 @@ static int pdlua_properties_addtextinput(lua_State *L)
         char text_button_frame[MAXPDSTRING];
         snprintf(text_button_frame, MAXPDSTRING, "%s.text_button_frame_%d", pdlua->properties.current_frame->s_name,
                  pdlua->properties.property_count);
-        pdgui_vmess(0, "sssssisisi", "frame", text_button_frame, "-relief", "solid", "-borderwidth", 1,
+        pdgui_vmess(0, "sssssisisi", "frame", text_button_frame, "-relief", "solid", "-borderwidth", 0,
                     "-padx", 5, "-pady", 5);
 
         // create text for identification
         snprintf(textid, MAXPDSTRING, "%s.text%d", text_button_frame, pdlua->properties.property_count);
         pdgui_vmess(0, "ssss", "label", textid, "-text", text);
 
-        // Create the number entry box
         snprintf(entryid, MAXPDSTRING, "%s.textbox%d", text_button_frame, pdlua->properties.property_count);
         pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", width);
+        pdgui_vmess(0, "ssss", "bind", entryid, "<Return>", pdsend);
+        pdgui_vmess(0, "ssss", "bind", entryid, "<FocusOut>", pdsend);
 
-        // Create the set button
-        snprintf(buttonid, MAXPDSTRING, "%s.setbutton%d", text_button_frame, pdlua->properties.property_count);
-        pdgui_vmess(0, "sssssssisi", "button", buttonid, "-text", "Set", "-command", pdsend, "-padx",
-                    10, "-pady", 0);
-
-        // Pack the entry and button side by side
+        // Pack the entry
         pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
         pdgui_vmess(0, "ssss", "pack", entryid, "-side", "left");
-        pdgui_vmess(0, "ssss", "pack", buttonid, "-side", "right");
         pdgui_vmess(0, "sssisisssi", "grid", text_button_frame, "-row", pdlua->properties.current_row, "-column",
                     pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
         pdlua_properties_updaterow(&pdlua->properties);
@@ -580,10 +586,7 @@ static int pdlua_properties_addnumberbox(lua_State *L)
                         "-command", pdsend);
         }
         pdgui_vmess(0, "ssss", "bind", spinboxid, "<Return>", pdsend);
-
-        pdgui_vmess(0, "ssss", "bind", spinboxid, "<<Increment>>", pdsend);
-        pdgui_vmess(0, "ssss", "bind", spinboxid, "<<Decrement>>", pdsend);
-        pdgui_vmess(0, "ssss", "bind", spinboxid, "<Return>", pdsend);
+        pdgui_vmess(0, "ssss", "bind", spinboxid, "<FocusOut>", pdsend);
 
         pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
         pdgui_vmess(0, "ssss", "pack", spinboxid, "-side", "top");
