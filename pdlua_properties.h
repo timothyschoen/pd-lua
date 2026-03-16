@@ -237,10 +237,17 @@ static int pdlua_properties_addcombo(lua_State *L)
 
 #else
 
-static void pdlua_properties_createdialog(t_pdlua_properties *p)
+static void pdlua_properties_createdialog(t_pdlua_properties *p, const char* name)
 {
     pdgui_vmess(0, "ssss", "toplevel", p->properties_receiver->s_name, "-class", "DialogWindow");
-    pdgui_vmess(0, "ssss", "wm", "title", p->properties_receiver->s_name, "{[mydialog] Properties}");
+
+    char title[MAXPDSTRING];
+    snprintf(title, MAXPDSTRING, "%s", name);
+    char *suffix = strstr(title, ":gfx");
+    if (suffix) *suffix = '\0';
+    strncat(title, " Properties", MAXPDSTRING - strlen(title) - 1);
+    pdgui_vmess(0, "ssss", "wm", "title", p->properties_receiver->s_name, title);
+
     pdgui_vmess(0, "sss", "wm", "group", p->properties_receiver->s_name, ".");
     pdgui_vmess(0, "sssii", "wm", "resizable", p->properties_receiver->s_name, 0, 0);
 
@@ -319,7 +326,7 @@ static void pdlua_properties(t_gobj *z, t_glist *owner) {
 
     pd_bind(&pdlua->pd.ob_pd, p->properties_receiver);
 
-    pdlua_properties_createdialog(p); // <-- create hidden window
+    pdlua_properties_createdialog(p, pdlua->pd.te_g.g_pd->c_name->s_name); // <-- create hidden window
 
     // main window
     char frameId[MAXPDSTRING];
