@@ -37,8 +37,8 @@ function properties:properties(p)
 
     -- Number boxes
     p:new_frame("Numbers", 2)
-    p:add_number("Float", "updatefloat", self.float, 0, 0, 1)
-    p:add_number("Int", "updateint", self.int, 1, 1, 16)
+    p:add_float("Float", "updatefloat", self.float, 0, 1)
+    p:add_int("Int", "updateint", self.int, 1, 16)
 
     -- Combobox
     p:new_frame("Combo", 1)

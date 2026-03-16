@@ -92,13 +92,12 @@ pd._perform_dsp = function (object, ...)
 end
 
 -- draw properties
-pd._properties = function (object)
+pd._properties = function (object, p)
   local obj = pd._objects[object]
   if nil ~= obj and type(obj.properties) == "function" then
-        obj:properties()
+        obj:properties(p)
         return true
   else
-        pd.post("not found")
         return false
   end
 end

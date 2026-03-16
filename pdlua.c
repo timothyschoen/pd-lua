@@ -2964,20 +2964,6 @@ static void pdlua_init(lua_State *L)
     lua_pushcfunction(L, pdlua_error);
     lua_settable(L, -3);
 
-    // properties
-    lua_pushstring(L, "_properties_newframe");
-    lua_pushcfunction(L, pdlua_properties_newframe);
-    lua_settable(L, -3);
-    lua_pushstring(L, "_properties_addcheckbox");
-    lua_pushcfunction(L, pdlua_properties_addcheckbox);
-    lua_settable(L, -3);
-    lua_pushstring(L, "_properties_addtextinput");
-    lua_pushcfunction(L, pdlua_properties_addtextinput);
-    lua_settable(L, -3);
-    lua_pushstring(L, "_properties_addcolorpicker");
-    lua_pushcfunction(L, pdlua_properties_addcolorpicker);
-    lua_settable(L, -3);
-
     /* 20240906 ag: Added TIMEUNITPERMSEC, systime and timesince, to make
        clock_set useable. NOTE: TIMEUNITPERMSEC is the time unit for systime,
        timesince, and clock_set and is from m_sched.c. It isn't in the Pd
