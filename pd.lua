@@ -115,6 +115,12 @@ pd._mouseevent = function (object, x, y, event_type)
     if event_type == 3 and type(obj.mouse_drag) == "function" then
       obj:mouse_drag(x, y)
     end
+    if event_type == 4 and type(obj.mouse_enter) == "function" then
+      obj:mouse_enter(x, y)
+    end
+    if event_type == 5 and type(obj.mouse_exit) == "function" then
+      obj:mouse_exit(x, y)
+    end
   end
 end
 

@@ -252,6 +252,15 @@ typedef struct pdlua_proxyclock
     struct pdlua    *owner; /**< Object to forward messages to. */
     t_clock         *clock; /** Pd clock to use. */
 } t_pdlua_proxyclock;
+
+/** Proxy canvas object data. */
+typedef struct pdlua_proxycanvas
+{
+    t_pd            pd; /**< Minimal Pd object. */
+    t_symbol        *p_sym; /**< The name of the canvas. */
+    struct pdlua    *p_parent; /**< The parent object. */
+    t_clock         *p_clock; /**< clock for deferred cleanup */
+} t_pdlua_proxycanvas;
 /* prototypes*/
 
 static const char *pdlua_reader (lua_State *L, void *rr, size_t *size);
@@ -277,6 +286,14 @@ static t_pdlua_proxyclock *pdlua_proxyclock_new (struct pdlua *owner);
 static void pdlua_proxyclock_setup (void);
 /** Dump an array of atoms into a Lua table. */
 static void pdlua_pushatomtable (int argc, t_atom *argv);
+/** Proxy canvas 'anything' method. */
+static void pdlua_proxycanvas_anything(t_pdlua_proxycanvas *p, t_symbol *s, int argc, t_atom *argv);
+/** Proxy canvas cleanup and deallocation. */
+static void pdlua_proxycanvas_free(t_pdlua_proxycanvas *p);
+/** Proxy canvas allocation and initialization. */
+static t_pdlua_proxycanvas *pdlua_proxycanvas_new(struct pdlua *owner, t_symbol *name);
+/** Register the proxy canvas class with Pd. */
+static void pdlua_proxycanvas_setup(void);
 /** Pd object constructor. */
 static t_pdlua *pdlua_new (t_symbol *s, int argc, t_atom *argv);
 /** Pd object destructor. */
@@ -360,12 +377,15 @@ void pdlua_setup (void);
 struct pdlua_proxyinlet;
 struct pdlua_proxyreceive;
 struct pdlua_proxyclock;
+struct pdlua_proxycanvas;
 /** Proxy inlet class pointer. */
 static t_class *pdlua_proxyinlet_class;
 /** Proxy receive class pointer. */
 static t_class *pdlua_proxyreceive_class;
 /** Proxy clock class pointer. */
 static t_class *pdlua_proxyclock_class;
+/** Proxy canvas class pointer. */
+static t_class *pdlua_proxycanvas_class;
 
 /** Lua file reader callback. */
 static const char *pdlua_reader
@@ -390,6 +410,70 @@ static const char *pdlua_reader
         *size = s;
         return r->buffer;
     }
+}
+
+static void pdlua_proxycanvas_anything(t_pdlua_proxycanvas *p, t_symbol *s, int argc, t_atom *argv) {
+#if !PLUGDATA
+    // Early returns for invalid conditions
+    if (!p->p_parent) return;
+    if (s != gensym("motion")) return;
+    if (argc != 3) return;
+    
+    t_pdlua *x = p->p_parent;
+    if (!x->has_gui || x->gfx.mouse_down) return;
+    
+    float new_x = atom_getfloat(argv);
+    float new_y = atom_getfloat(argv + 1);
+    
+    int zoom = glist_getzoom(x->canvas);
+    int obj_x = text_xpix(&x->pd, x->canvas);
+    int obj_y = text_ypix(&x->pd, x->canvas);
+    
+    int xpos = (new_x - obj_x) / zoom;
+    int ypos = (new_y - obj_y) / zoom;
+    
+    int inside = (xpos >= 0 && xpos < x->gfx.width && 
+                 ypos >= 0 && ypos < x->gfx.height);
+
+    // Handle state changes first
+    if (!inside && x->gfx.mouse_inside) {
+        pdlua_gfx_mouse_exit(x, xpos, ypos);
+        x->gfx.mouse_inside = 0;
+    } else if (inside && !x->gfx.mouse_inside) {
+        pdlua_gfx_mouse_enter(x, xpos, ypos);
+        x->gfx.mouse_inside = 1;
+    }
+    
+    // Only then send move event if we're inside
+    if (inside) {
+        pdlua_gfx_mouse_move(x, xpos, ypos);
+    }
+    
+    x->gfx.mouse_x = new_x;
+    x->gfx.mouse_y = new_y;
+#endif
+}
+
+static t_pdlua_proxycanvas *pdlua_proxycanvas_new(struct pdlua *owner, t_symbol *s) {
+    if (!owner || !s || s == &s_) return NULL;
+    
+    t_pdlua_proxycanvas *p = (t_pdlua_proxycanvas *)pd_new(pdlua_proxycanvas_class);
+    if (!p) return NULL;
+    
+    memset(p, 0, sizeof(t_pdlua_proxycanvas));
+    p->pd = pdlua_proxycanvas_class;
+    p->p_sym = s;
+    p->p_parent = owner;
+    p->p_clock = clock_new(p, (t_method)pdlua_proxycanvas_free);
+    pd_bind(&p->pd, p->p_sym);
+    
+    return p;
+}
+
+static void pdlua_proxycanvas_free(t_pdlua_proxycanvas *p) {
+    if (!p) return;
+    if (p->p_sym) pd_unbind(&p->pd, p->p_sym);
+    if (p->p_clock) clock_free(p->p_clock);
 }
 
 /** Proxy inlet 'anything' method. */
@@ -506,6 +590,21 @@ static t_pdlua_proxyclock *pdlua_proxyclock_new
 static void pdlua_proxyclock_setup(void)
 {
     pdlua_proxyclock_class = class_new(global_gensym("pdlua proxy clock"), 0, 0, sizeof(t_pdlua_proxyclock), 0, 0);
+}
+
+/** Setup the proxy class for canvas events. */
+static void pdlua_proxycanvas_setup(void)
+{
+#if !PLUGDATA
+    pdlua_proxycanvas_class = class_new(
+        gensym("pdlua proxy canvas"), 0,
+        (t_method)pdlua_proxycanvas_free,
+        sizeof(t_pdlua_proxycanvas), 
+        CLASS_NOINLET | CLASS_PD,
+        0);        
+    if (pdlua_proxycanvas_class)
+        class_addanything(pdlua_proxycanvas_class, (t_method)pdlua_proxycanvas_anything);
+#endif
 }
 
 /** Dump an array of atoms into a Lua table. */
@@ -728,9 +827,24 @@ static t_pdlua *pdlua_new
         if (lua_islightuserdata(__L(), -1))
         {
             object = lua_touserdata(__L(), -1);
+#if !PLUGDATA
+            // Create canvas proxy if we have GUI
+            if (object->has_gui) {
+                t_canvas *parent_canvas = glist_getcanvas(object->canvas);
+                char buf[MAXPDSTRING];
+                snprintf(buf, MAXPDSTRING-1, ".x%lx", (unsigned long)parent_canvas);
+                object->gfx.proxycanvas = pdlua_proxycanvas_new(object, gensym(buf));
+                if (!object->gfx.proxycanvas) {
+                    pd_error(NULL, "pdlua: failed to create canvas proxy");
+                    pd_free((t_pd *)object);
+                    lua_pop(__L(), 2);
+                    return NULL;
+                }
+            }
+#endif
             lua_pop(__L(), 2);/* pop the userdata and the global "pd" */
             PDLUA_DEBUG2("pdlua_new: before returning object %p stack top %d", object, lua_gettop(__L()));
-             return object;
+            return object;
         }
         else
         {
@@ -763,7 +877,6 @@ static void pdlua_free( t_pdlua *o /**< The object to destruct. */)
 }
 
 void pdlua_vis(t_gobj *z, t_glist *glist, int vis){
-    
     t_pdlua* x = (t_pdlua *)z;
     // If there's no gui, use default text vis behavior
     if(!x->has_gui)
@@ -782,8 +895,9 @@ void pdlua_vis(t_gobj *z, t_glist *glist, int vis){
     }
 }
 
-static void pdlua_delete(t_gobj *z, t_glist *glist){
-    if(!((t_pdlua *)z)->has_gui)
+static void pdlua_delete(t_gobj *z, t_glist *glist) {
+    t_pdlua *x = (t_pdlua *)z;
+    if(!x->has_gui)
     {
         text_widgetbehavior.w_deletefn(z, glist);
         return;
@@ -793,6 +907,14 @@ static void pdlua_delete(t_gobj *z, t_glist *glist){
     }
     
     canvas_deletelinesfor(glist, (t_text *)z);
+    
+#if !PLUGDATA
+    if (x->gfx.proxycanvas) {
+        // Schedule deferred cleanup (similar to receivecanvas external code)
+        clock_delay(x->gfx.proxycanvas->p_clock, 0);
+        x->gfx.proxycanvas = NULL;
+    }
+#endif
 }
 
 #ifdef PURR_DATA // Purr Data uses an older version of this API
@@ -802,19 +924,35 @@ static void pdlua_motion(t_gobj *z, t_floatarg dx, t_floatarg dy,
     t_floatarg up)
 #endif
 {
-#ifndef PLUGDATA
+#if !PLUGDATA
+    t_pdlua *x = (t_pdlua *)z;
+    if (!x->has_gui) return;
 #ifndef PURR_DATA
-    if (!up)
-#endif
-    {
-        t_pdlua *x = (t_pdlua *)z;
-        x->gfx.mouse_drag_x = x->gfx.mouse_drag_x + dx;
-        x->gfx.mouse_drag_y = x->gfx.mouse_drag_y + dy;
+    // Handle mouse up immediately
+    if (up && x->gfx.mouse_down) {
         int zoom = glist_getzoom(glist_getcanvas(x->canvas));
-        int xpos = (x->gfx.mouse_drag_x - text_xpix(&x->pd, x->canvas)) / zoom;
-        int ypos = (x->gfx.mouse_drag_y - text_ypix(&x->pd, x->canvas)) / zoom;
-        pdlua_gfx_mouse_drag(x, xpos, ypos);
+        int xpos = (x->gfx.mouse_x - text_xpix(&x->pd, x->canvas)) / zoom;
+        int ypos = (x->gfx.mouse_y - text_ypix(&x->pd, x->canvas)) / zoom;
+        pdlua_gfx_mouse_up(x, xpos, ypos);
+        x->gfx.mouse_down = 0;
+
+        // After mouse up, check if we need to send exit
+        int inside = (xpos >= 0 && xpos < x->gfx.width && 
+                     ypos >= 0 && ypos < x->gfx.height);
+        if (!inside && x->gfx.mouse_inside) {
+            pdlua_gfx_mouse_exit(x, xpos, ypos);
+            x->gfx.mouse_inside = 0;
+        }
+        return;
     }
+#endif
+
+    x->gfx.mouse_x += dx;
+    x->gfx.mouse_y += dy;    
+    int zoom = glist_getzoom(glist_getcanvas(x->canvas));
+    int xpos = (x->gfx.mouse_x - text_xpix(&x->pd, x->canvas)) / zoom;
+    int ypos = (x->gfx.mouse_y - text_ypix(&x->pd, x->canvas)) / zoom;
+    pdlua_gfx_mouse_drag(x, xpos, ypos);
 #endif
 }
 
@@ -826,33 +964,31 @@ static int pdlua_click(t_gobj *z, t_glist *gl, int xpos, int ypos, int shift, in
         int zoom = glist_getzoom(gl);
         int xpix = (xpos - text_xpix(&x->pd, gl)) / zoom; 
         int ypix = (ypos - text_ypix(&x->pd, gl)) / zoom;
-                
-        if(doit){
-            if(!x->gfx.mouse_down)
-            {
-                pdlua_gfx_mouse_down(x, xpix, ypix);
-                x->gfx.mouse_drag_x = xpos;
-                x->gfx.mouse_drag_y = ypos;
-            }
-            
-            glist_grab(x->canvas, &x->pd.te_g, (t_glistmotionfn)pdlua_motion, NULL, xpos, ypos);
-        }
-        else {
-            pdlua_gfx_mouse_move(x, xpix, ypix);
-            
+
+        if (doit) {
+            x->gfx.mouse_down = 1;
+            x->gfx.mouse_x = xpos;
+            x->gfx.mouse_y = ypos;
+            pdlua_gfx_mouse_down(x, xpix, ypix);
+            glist_grab(gl, &x->pd.te_g, (t_glistmotionfn)pdlua_motion, NULL, xpos, ypos);
+        } else {
+            // Handle mouse up here for Purr Data
+            // (Vanilla PD handles it in pdlua_motion with the 'up' flag)
             if(x->gfx.mouse_down)
             {
                 pdlua_gfx_mouse_up(x, xpix, ypix);
+                x->gfx.mouse_down = 0;
             }
+            // no move events generated here
+            // Let the proxy handle all move events
+            x->gfx.mouse_x = xpos;
+            x->gfx.mouse_y = ypos;
         }
-        
-        x->gfx.mouse_down = doit;
         return 1;
     } else
 #endif
     return text_widgetbehavior.w_clickfn(z, gl, xpos, ypos, shift, alt, dbl, doit);
 }
-
 
 static void pdlua_displace(t_gobj *z, t_glist *glist, int dx, int dy){
     t_pdlua *x = (t_pdlua *)z;
@@ -1465,8 +1601,8 @@ static int pdlua_object_new(lua_State *L)
                
 #ifndef PLUGDATA
                 // Init graphics state for pd
-                o->gfx.mouse_drag_x = 0;
-                o->gfx.mouse_drag_y = 0;
+                o->gfx.mouse_x = 0;
+                o->gfx.mouse_y = 0;
                 o->gfx.mouse_down = 0;
 #else
                 // NULL until plugdata overrides them with something useful
@@ -3082,7 +3218,9 @@ void pdlua_setup(void)
     PDLUA_DEBUG("pdlua pdlua_proxyreceive_setup done", 0);
     pdlua_proxyclock_setup();
     PDLUA_DEBUG("pdlua pdlua_proxyclock_setup done", 0);
-    if (! pdlua_proxyinlet_class || ! pdlua_proxyreceive_class || ! pdlua_proxyclock_class)
+    pdlua_proxycanvas_setup();
+    PDLUA_DEBUG("pdlua pdlua_proxycanvas_setup done", 0);
+    if (! pdlua_proxyinlet_class || ! pdlua_proxyreceive_class || ! pdlua_proxyclock_class || ! pdlua_proxycanvas_class)
     {
         pd_error(NULL, "lua: error creating proxy classes");
         pd_error(NULL, "lua: loader will not be registered!");

@@ -168,6 +168,14 @@ void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 3);
 }
 
+void pdlua_gfx_mouse_enter(t_pdlua *x, int xpos, int ypos) {
+    pdlua_gfx_mouse_event(x, xpos, ypos, 4);
+}
+
+void pdlua_gfx_mouse_exit(t_pdlua *x, int xpos, int ypos) {
+    pdlua_gfx_mouse_event(x, xpos, ypos, 5);
+}
+
 // Represents a path object, created with path.new(x, y)
 // for pd-vanilla, this contains all the points that the path contains. bezier curves are flattened out to points before being added
 // for plugdata, it only contains a unique ID to the juce::Path that this is mapped to
@@ -832,6 +840,7 @@ static int gfx_initialize(t_pdlua *obj)
     gfx->num_transforms = 0;
     gfx->num_layers = 0;
     gfx->layer_tags = NULL;
+    gfx->mouse_inside = 0;
     
     pdlua_gfx_repaint(obj, 0);
     return 0;
