@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 #include <sys/types.h> // for open
 #include <sys/stat.h> // for open
 #ifdef _MSC_VER
@@ -58,6 +59,7 @@
 /* BAD: support for Pd < 0.41 */
 
 #include "pdlua_gfx.h"
+#include "pdlua_properties.h"
 
 typedef void (*t_signal_setmultiout)(t_signal **, int); 
 static t_signal_setmultiout g_signal_setmultiout;
@@ -1530,6 +1532,9 @@ static int pdlua_class_new(lua_State *L)
         /* a class with a "menu-open" method will have the "Open" item highlighted in the right-click menu */
         class_addmethod(c, (t_method)pdlua_menu_open, gensym("menu-open"), A_NULL);/* (mrpeach 20111025) */
         class_addmethod(c, (t_method)pdlua_dsp, gensym("dsp"), A_CANT, 0); /* timschoen 20240226 */
+
+        class_setpropertiesfn(c, pdlua_properties);
+        class_addmethod(c, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
     }
 
     if (c_gfx) {
@@ -1556,7 +1561,6 @@ static int pdlua_class_new(lua_State *L)
         pdlua_widgetbehavior.w_activatefn = pdlua_activate;
         class_setwidget(c_gfx, &pdlua_widgetbehavior);
 
-        // NOTE: It is possible to do this just for the object, not all gui objects
         class_setpropertiesfn(c_gfx, pdlua_properties);
         class_addmethod(c_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
 
@@ -2961,10 +2965,6 @@ static void pdlua_init(lua_State *L)
     lua_settable(L, -3);
 
     // properties
-    lua_pushstring(L, "_properties_add");
-    lua_pushcfunction(L, pdlua_properties_add);
-    lua_settable(L, -3);
-
     lua_pushstring(L, "_properties_newframe");
     lua_pushcfunction(L, pdlua_properties_newframe);
     lua_settable(L, -3);

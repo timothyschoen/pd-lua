@@ -25,8 +25,9 @@ typedef struct _gfx_transform
     float x, y;
 } gfx_transform;
 
-typedef struct _gfx_properties
+typedef struct _pdlua_properties
 {
+#ifndef PLUGDATA
     t_symbol *current_frame;
     t_symbol *properties_receiver;
     int frame_count;
@@ -36,8 +37,10 @@ typedef struct _gfx_properties
     int checkbox_count;
     int numberbox_count;
     int colorpicker_count;
-} gfx_properties;
-
+#else
+    void(*plugdata_properties_callback)(void*, t_symbol*, int, t_atom*); // Callback to add properties in plugdata
+#endif
+} t_pdlua_properties;
 
 typedef struct _pdlua_gfx
 {
@@ -64,7 +67,6 @@ typedef struct _pdlua_gfx
     int num_images;
 #endif
     struct pdlua_proxycanvas *proxycanvas;
-    gfx_properties properties_panel;
 #else
     int current_layer;
     void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*); // Callback to perform drawing in plugdata
@@ -89,6 +91,7 @@ typedef struct pdlua
     t_canvas                *canvas;          // The canvas that the object was created on.
     int                     has_gui;          // True if graphics are enabled.
     t_pdlua_gfx             gfx;              // Holds state for graphics.
+    t_pdlua_properties      properties;       // Holds state for properties panel
     t_class                 *pdlua_class;     // Holds our class pointer.
     t_class                 *pdlua_class_gfx; // Holds our gfx class pointer.
     t_signal                **sp;             // Array of signal pointers for multichannel audio.
