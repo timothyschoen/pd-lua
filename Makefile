@@ -47,17 +47,15 @@ endif
 pdlua.class.sources := pdlua.c $(luasrc)
 pdlua.class.ldlibs := $(lualibs)
 
-datafiles = pd.lua $(wildcard pdlua*-help.pd)
+datafiles = \
+	pd.lua $(wildcard pdlua*-help.pd) \
+	$(addprefix pdlua/tutorial/examples/, pdx.lua pd-remote.el pd-remote.pd) \
+	pdlua-meta.pd
+
+# the 'pdlua' directory contains subdirectories (with subdirs),
+# so we need to list all of them
+datadirs = $(shell find pdlua -type d)
+
 
 PDLIBBUILDER_DIR=.
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
-
-install: installplus
-
-pdx_files = $(addprefix ./pdlua/tutorial/examples/, pdx.lua pd-remote.el pd-remote.pd)
-
-installplus:
-	$(INSTALL_DIR) -v "$(installpath)"
-	cp -r ./pdlua/ "${installpath}"/pdlua
-	cp pdlua-meta.pd "${installpath}"
-	cp $(pdx_files) "${installpath}"
