@@ -32,12 +32,9 @@ typedef struct _pdlua_properties
     t_symbol *current_frame;
     t_symbol *properties_receiver;
     int frame_count;
+    int property_count;
     int max_col, max_row;
     int current_col, current_row;
-
-    int checkbox_count;
-    int numberbox_count;
-    int colorpicker_count;
 #else
     void(*plugdata_properties_callback)(void*, t_symbol*, int, t_atom*); // Callback to add properties in plugdata
 #endif
