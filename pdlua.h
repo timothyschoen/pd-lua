@@ -25,6 +25,7 @@ typedef struct _gfx_transform
     float x, y;
 } gfx_transform;
 
+
 typedef struct _pdlua_properties
 {
 #ifndef PLUGDATA
