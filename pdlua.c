@@ -62,12 +62,8 @@
 typedef void (*t_signal_setmultiout)(t_signal **, int); 
 static t_signal_setmultiout g_signal_setmultiout;
 
-// This used to be in s_stuff.h, but not anymore since 0.55.1test1.
-int open_via_path(const char *dir, const char *name, const char* ext,
-    char *dirresult, char **nameresult, unsigned int size, int bin);
-
 // Check for absolute filenames in the second argument. Otherwise,
-// sys_trytoopenone will happily prepend the given path anyway.
+// open_via_path will happily prepend the given path anyway.
 #define trytoopenone(dir, name, ...) open_via_path(sys_isabsolutepath(name) ? "" : dir, name, __VA_ARGS__)
 
 #ifdef PDINSTANCE
