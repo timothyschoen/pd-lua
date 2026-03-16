@@ -1555,6 +1555,11 @@ static int pdlua_class_new(lua_State *L)
         pdlua_widgetbehavior.w_visfn      = pdlua_vis;
         pdlua_widgetbehavior.w_activatefn = pdlua_activate;
         class_setwidget(c_gfx, &pdlua_widgetbehavior);
+
+        // NOTE: It is possible to do this just for the object, not all gui objects
+        class_setpropertiesfn(c_gfx, pdlua_properties);
+        class_addmethod(c_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
+
     }
 
     lua_pushlightuserdata(L, c);
@@ -2954,6 +2959,25 @@ static void pdlua_init(lua_State *L)
     lua_pushstring(L, "_error");
     lua_pushcfunction(L, pdlua_error);
     lua_settable(L, -3);
+
+    // properties
+    lua_pushstring(L, "_properties_add");
+    lua_pushcfunction(L, pdlua_properties_add);
+    lua_settable(L, -3);
+
+    lua_pushstring(L, "_properties_newframe");
+    lua_pushcfunction(L, pdlua_properties_newframe);
+    lua_settable(L, -3);
+    lua_pushstring(L, "_properties_addcheckbox");
+    lua_pushcfunction(L, pdlua_properties_addcheckbox);
+    lua_settable(L, -3);
+    lua_pushstring(L, "_properties_addtextinput");
+    lua_pushcfunction(L, pdlua_properties_addtextinput);
+    lua_settable(L, -3);
+    lua_pushstring(L, "_properties_addcolorpicker");
+    lua_pushcfunction(L, pdlua_properties_addcolorpicker);
+    lua_settable(L, -3);
+
     /* 20240906 ag: Added TIMEUNITPERMSEC, systime and timesince, to make
        clock_set useable. NOTE: TIMEUNITPERMSEC is the time unit for systime,
        timesince, and clock_set and is from m_sched.c. It isn't in the Pd

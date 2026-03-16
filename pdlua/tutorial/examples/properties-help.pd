@@ -1,0 +1,5 @@
+#N canvas 963 23 951 1016 10;
+#X declare -lib pdlua;
+#X obj 5 7 declare -lib pdlua;
+#X obj 254 59 tgl 18 0 empty empty empty 0 -9 0 10 #fcfcfc #000000 #000000 0 1;
+#X obj 66 69 properties;

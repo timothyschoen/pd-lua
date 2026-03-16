@@ -25,6 +25,20 @@ typedef struct _gfx_transform
     float x, y;
 } gfx_transform;
 
+typedef struct _gfx_properties
+{
+    t_symbol *current_frame;
+    t_symbol *properties_receiver;
+    int frame_count;
+    int max_col, max_row;
+    int current_col, current_row;
+
+    int checkbox_count;
+    int numberbox_count;
+    int colorpicker_count;
+} gfx_properties;
+
+
 typedef struct _pdlua_gfx
 {
     // Size variables
@@ -50,6 +64,7 @@ typedef struct _pdlua_gfx
     int num_images;
 #endif
     struct pdlua_proxycanvas *proxycanvas;
+    gfx_properties properties_panel;
 #else
     int current_layer;
     void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*); // Callback to perform drawing in plugdata
