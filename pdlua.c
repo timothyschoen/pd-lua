@@ -3336,7 +3336,8 @@ void pdlua_setup(void)
     }
 
     pdlua_gfx_setup(__L());
-    
+    pdlua_properties_setup(__L());
+
     PDLUA_DEBUG("pdlua_setup: end. stack top %d", lua_gettop(__L()));
 #ifndef PLUGDATA
     /* nw.js support. */

@@ -1,7 +1,7 @@
 /** @file pdlua_properties.h
  *  @brief pdlpdlua_propertiesua_gfx -- an extension to pdlua that spawning properties windowds
  *  @author Charles K. Neimog
- *  @date 2023
+ *  @date 2026
  *
  * Copyright (C) 2026 Charles K. Neimog and Timothy Schoen
  *
@@ -21,28 +21,56 @@
  *
  */
 
+static int pdlua_properties_newframe(lua_State *L);
+static int pdlua_properties_addcheckbox(lua_State *L);
+static int pdlua_properties_addtextinput(lua_State *L);
+static int pdlua_properties_addcolorpicker(lua_State *L);
+
+static int pdlua_properties_setup(lua_State* L)
+{
+    static const luaL_Reg properties_methods[] = {
+        {"new_frame", pdlua_properties_newframe},
+        {"add_checkbox", pdlua_properties_addcheckbox},
+        {"add_textinput", pdlua_properties_addtextinput},
+        {"add_colorpicker", pdlua_properties_addcolorpicker},
+        {NULL, NULL} // Sentinel to end the list
+    };
+
+    luaL_newmetatable(L, "PropertiesContext");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, properties_methods, 0);
+}
+
 #ifdef PLUGDATA
 
-static void pdlua_properties(t_gobj *z, t_glist *owner) {
+static void pdlua_properties(t_gobj *z, t_glist *owner)
+{
     t_pdlua *pdlua = (t_pdlua *)z;
+    lua_State *L = __L();
 
-    // call _properties
-    lua_getglobal(__L(), "pd");
-    lua_getfield (__L(), -1, "_properties");
-    lua_pushlightuserdata(__L(), pdlua);
-    if (lua_pcall(__L(), 1, 1, 0))
+    lua_getglobal(L, "pd");
+    lua_getfield(L, -1, "_properties");
+
+    lua_pushlightuserdata(L, pdlua);
+    t_pdlua **ctx = lua_newuserdata(L, sizeof(t_pdlua*));
+    *ctx = pdlua;
+
+    luaL_getmetatable(L, "PropertiesContext");
+    lua_setmetatable(L, -2);
+
+    if (lua_pcall(L, 2, 1, 0))
     {
-        mylua_error(__L(), pdlua, "properties");
+        mylua_error(L, pdlua, "properties");
         return;
     }
 }
 
 static int pdlua_properties_newframe(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *title = lua_tostring(L, 2);
         int col = lua_tonumber(L, 3);
 
@@ -50,17 +78,16 @@ static int pdlua_properties_newframe(lua_State *L)
         SETSYMBOL(&atoms[0], gensym(title));
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_frame_property"), 1, atoms);
     } else {
-        mylua_error(__L(), NULL, "properties");
+        mylua_error(__L(), NULL, "new_frame: invalid args");
     }
     return 0;
 }
 
 static int pdlua_properties_addcheckbox(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
         t_atom atoms[3];
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
@@ -68,17 +95,16 @@ static int pdlua_properties_addcheckbox(lua_State *L)
         SETFLOAT (&atoms[2], (t_float)lua_tonumber(L, 4));
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_checkbox_property"), 3, atoms);
     } else {
-        mylua_error(__L(), NULL, "addcheckbox");
+        mylua_error(__L(), NULL, "add_checkbox: invalid args");
     }
     return 0;
 }
 
 static int pdlua_properties_addtextinput(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
         t_atom atoms[4];
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
@@ -87,29 +113,76 @@ static int pdlua_properties_addtextinput(lua_State *L)
         SETFLOAT (&atoms[3], (t_float)lua_tonumber(L, 5));
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_text_property"), 4, atoms);
     } else {
-        mylua_error(__L(), NULL, "Types checks failed");
+        mylua_error(__L(), NULL, "add_textinput: invalid args");
     }
     return 0;
 }
 
 static int pdlua_properties_addcolorpicker(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
         t_atom atoms[2];
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
         SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_color_property"), 2, atoms);
     } else {
-        mylua_error(__L(), NULL, "addcolorpicker");
+        mylua_error(__L(), NULL, "add_colorpicker: invalid args");
     }
     return 0;
 }
 
 #else
+
+static void pdlua_properties(t_gobj *z, t_glist *owner) {
+    t_pdlua *pdlua = (t_pdlua *)z;
+    t_pdlua_properties *p = &pdlua->properties;
+
+    char receiver[MAXPDSTRING];
+    snprintf(receiver, MAXPDSTRING, ".%p", p);
+    pdlua->properties.properties_receiver = gensym(receiver);
+    pdlua->properties.current_frame = NULL;
+    pd_bind(&pdlua->pd.ob_pd, p->properties_receiver); // new to unbind
+
+    pdlua_properties_createdialog(p); // <-- create hidden window
+
+    // main window
+    char frameId[MAXPDSTRING];
+    snprintf(frameId, MAXPDSTRING, ".%p.main", (void *)p);
+    pdgui_vmess(0, "sss", "wm", "deiconify", p->properties_receiver->s_name); // <- on sucess show the window
+    pdgui_vmess(0, "sssf", "frame", frameId, "-padx", 15.0f, "-pady", 15.0f);
+    pdgui_vmess(0, "sssssf", "pack", frameId, "-fill", "both", "-expand", 4.0f);
+    pdgui_vmess(0, "sssfsf", "pack", frameId, "-pady", 10.f, "-padx", 10.f);
+
+    // call _properties
+    lua_getglobal(L, "pd");
+    lua_getfield(L, -1, "_properties");
+
+    t_pdlua **ctx = lua_newuserdata(L, sizeof(t_pdlua*));
+    *ctx = pdlua;
+
+    lua_pushlightuserdata(L, pdlua);
+    luaL_getmetatable(L, "PropertiesContext");
+    lua_setmetatable(L, -2);
+
+    if (lua_pcall(L, 2, 1, 0))
+    {
+        mylua_error(L, pdlua, "properties");
+        return;
+    }
+
+    // Get the return value (Lua pushes it onto the stack)
+    int result = lua_toboolean(__L(), -1); // Converts Lua boolean to C int (1 = true, 0 = false)
+    lua_pop(__L(), 1); // Remove the result from the stack
+    if (!result)
+    {
+        pdgui_vmess(0, "ss", "destroy", p->properties_receiver->s_name);
+        return;
+    }
+    pdlua_properties_setupbuttons(p); // <- this is independed of all previous containers
+}
 
 static void pdlua_properties_createdialog(t_pdlua_properties *p)
 {
@@ -172,10 +245,9 @@ static void pdlua_properties_setupbuttons(t_pdlua_properties *p) {
 
 static int pdlua_properties_newframe(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *title = lua_tostring(L, 2);
         int col = lua_tonumber(L, 3);
 
@@ -211,7 +283,7 @@ static int pdlua_properties_newframe(lua_State *L)
         pdlua->properties.current_col = 0;
         pdlua->properties.current_row = 0;
     } else{
-        mylua_error(__L(), NULL, "properties");
+        mylua_error(__L(), NULL, "new_frame: invalid args");
 
     }
     return 0;
@@ -219,10 +291,9 @@ static int pdlua_properties_newframe(lua_State *L)
 
 static int pdlua_properties_addcheckbox(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
         int init_value = lua_tonumber(L, 4);
@@ -264,7 +335,7 @@ static int pdlua_properties_addcheckbox(lua_State *L)
                     "-sticky", "we");
         pdlua_properties_updaterow(&pdlua->properties);
     } else {
-        mylua_error(__L(), NULL, "addcheckbox");
+        mylua_error(__L(), NULL, "add_checkbox: invalid args");
     }
     return 0;
 }
@@ -272,10 +343,9 @@ static int pdlua_properties_addcheckbox(lua_State *L)
 
 static int pdlua_properties_addtextinput(lua_State *L)
 {
-    t_pdlua *pdlua = NULL;
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
         const char *init_value = lua_tostring(L, 4);
@@ -340,18 +410,16 @@ static int pdlua_properties_addtextinput(lua_State *L)
                     pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
         pdlua_properties_updaterow(&pdlua->properties);
     } else {
-        mylua_error(__L(), NULL, "Types checks failed");
+        mylua_error(__L(), NULL, "add_textinput: invalid args");
     }
     return 0;
 }
 
 // static int pdlua_dialog_createcolorpicker(t_pdlua *x, const char *text, const char *method) {
 static int pdlua_properties_addcolorpicker(lua_State *L) {
-    t_pdlua *pdlua = NULL;
-
-    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
     {
-        pdlua = lua_touserdata(L, 1);
+        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
 
@@ -390,54 +458,9 @@ static int pdlua_properties_addcolorpicker(lua_State *L) {
                     "-sticky", "we");
         pdlua_properties_updaterow(&pdlua->properties);
     } else {
-        mylua_error(__L(), pdlua, "addcolorpicker");
+        mylua_error(__L(), NULL, "add_colorpicker: invalid args");
     }
 }
-
-
-static void pdlua_properties(t_gobj *z, t_glist *owner) {
-    t_pdlua *pdlua = (t_pdlua *)z;
-    t_pdlua_properties *p = &pdlua->properties;
-
-    char receiver[MAXPDSTRING];
-    snprintf(receiver, MAXPDSTRING, ".%p", p);
-    pdlua->properties.properties_receiver = gensym(receiver);
-    pdlua->properties.current_frame = NULL;
-    pd_bind(&pdlua->pd.ob_pd, p->properties_receiver); // new to unbind
-
-    pdlua_properties_createdialog(p); // <-- create hidden window
-
-    // main window
-    char frameId[MAXPDSTRING];
-    snprintf(frameId, MAXPDSTRING, ".%p.main", (void *)p);
-    pdgui_vmess(0, "sss", "wm", "deiconify", p->properties_receiver->s_name); // <- on sucess show the window
-    pdgui_vmess(0, "sssf", "frame", frameId, "-padx", 15.0f, "-pady", 15.0f);
-    pdgui_vmess(0, "sssssf", "pack", frameId, "-fill", "both", "-expand", 4.0f);
-    pdgui_vmess(0, "sssfsf", "pack", frameId, "-pady", 10.f, "-padx", 10.f);
-
-    // call _properties
-    lua_getglobal(__L(), "pd");
-    lua_getfield (__L(), -1, "_properties");
-    lua_pushlightuserdata(__L(), pdlua);
-    if (lua_pcall(__L(), 1, 1, 0))
-    {
-        mylua_error(__L(), pdlua, "properties");
-        pdgui_vmess(0, "ss", "destroy", p->properties_receiver->s_name);
-        return;
-    }
-
-    // Get the return value (Lua pushes it onto the stack)
-    int result = lua_toboolean(__L(), -1); // Converts Lua boolean to C int (1 = true, 0 = false)
-    lua_pop(__L(), 1); // Remove the result from the stack
-    if (!result)
-    {
-        pdgui_vmess(0, "ss", "destroy", p->properties_receiver->s_name);
-        return;
-    }
-    pdlua_properties_setupbuttons(p); // <- this is independed of all previous containers
-
-}
-
 #endif
 
 static void pdlua_properties_receiver(t_pdlua *o, t_symbol *s, int argc, t_atom *argv)

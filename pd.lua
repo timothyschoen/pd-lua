@@ -486,26 +486,6 @@ function pd.Class:set_args(args)
   pd._set_args(self._object, args)
 end
 
-function pd.Class:addproperties()
-    pd._properties_add(self._object)
-end
-
-function pd.Class:newframe(title, max_col)
-  pd._properties_newframe(self._object, title, max_col)
-end
-
-function pd.Class:addcheckbox(text, method, init_value)
-    pd._properties_addcheckbox(self._object, text, method, init_value)
-end
-
-function pd.Class:addtextinput(text, method, init_value, width)
-    pd._properties_addtextinput(self._object, text, method, init_value, width)
-end
-
-function pd.Class:addcolorpicker(text, method)
-    pd._properties_addcolorpicker(self._object, text, method)
-end
-
 function pd.Class:canvas_realizedollar(s)
   return pd._canvas_realizedollar(self._object, s)
 end
