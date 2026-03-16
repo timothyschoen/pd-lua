@@ -604,6 +604,8 @@ static void pdlua_proxycanvas_setup(void)
         0);        
     if (pdlua_proxycanvas_class)
         class_addanything(pdlua_proxycanvas_class, (t_method)pdlua_proxycanvas_anything);
+#else
+    pdlua_proxycanvas_class = 1;
 #endif
 }
 

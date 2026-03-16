@@ -460,8 +460,7 @@ static int draw_text(lua_State* L) {
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // w
     SETFLOAT(args + 4, luaL_optnumber(L, 5, 12.0f)); // font size
-    // FIXME: default font size of 12 seems arbitrary here. how can we get plugdata's fontsize?
-    // FIXME: ignoring the optional alignment parameter for plugdata for now
+    SETFLOAT(args + 5, luaL_optinteger(L, 6, 0)); // alignment
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_text"), 5, args);
     return 0;
 }
