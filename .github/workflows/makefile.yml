@@ -59,7 +59,7 @@ jobs:
         path: build
 
   windows-build:
-    runs-on: windows-2019
+    runs-on: windows-latest
     strategy:
       matrix:
         floatsize: [32, 64]
