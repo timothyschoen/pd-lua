@@ -21,7 +21,7 @@ jobs:
         fetch-depth: 0
 
     - name: install dependencies
-      run: git clone --branch=0.55-0 --depth=1 https://github.com/pure-data/pure-data.git
+      run: git clone --branch=0.56-2 --depth=1 https://github.com/pure-data/pure-data.git
 
     - name: make
       run: make install PDDIR=./pure-data objectsdir=./build floatsize=${{ matrix.floatsize }} extension=linux-amd64-${{ matrix.floatsize }}.so
@@ -46,11 +46,11 @@ jobs:
 
     - name: install dependencies
       run: |
-        wget https://github.com/pure-data/pure-data/archive/refs/tags/0.55-0.zip
-        unzip 0.55-0.zip
+        wget https://github.com/pure-data/pure-data/archive/refs/tags/0.56-2.zip
+        unzip 0.56-2.zip
 
     - name: make
-      run: make install objectsdir=./build PDDIR=./pure-data-0.55-0 arch="arm64 x86_64" floatsize=${{ matrix.floatsize }} extension=darwin-fat-${{ matrix.floatsize }}.so
+      run: make install objectsdir=./build PDDIR=./pure-data-0.56-2 arch="arm64 x86_64" floatsize=${{ matrix.floatsize }} extension=darwin-fat-${{ matrix.floatsize }}.so
 
     - name: upload
       uses: actions/upload-artifact@v4
@@ -75,18 +75,18 @@ jobs:
     - name: install dependencies for 32-bit
       if: matrix.floatsize == 32
       run: |
-        C:\msys64\usr\bin\wget.exe http://msp.ucsd.edu/Software/pd-0.55-0.msw.zip
-        unzip pd-0.55-0.msw.zip
+        C:\msys64\usr\bin\wget.exe http://msp.ucsd.edu/Software/pd-0.56-2.msw.zip
+        unzip pd-0.56-2.msw.zip
 
     - name: install dependencies for 64-bit
       if: matrix.floatsize == 64
       run: | # unfortunately, the folder name convention is slightly different here
-        C:\msys64\usr\bin\wget.exe https://puredata.info/downloads/pure-data/releases/0.55-0-pd64/Pd64-0.55-0.msw.zip
-        unzip Pd64-0.55-0.msw.zip
-        ren Pd-0.55.0 pd-0.55-0
+        C:\msys64\usr\bin\wget.exe https://puredata.info/downloads/pure-data/releases/0.56-2-pd64/Pd64-0.56-2.msw.zip
+        unzip Pd64-0.56-2.msw.zip
+        ren Pd-0.56.2 pd-0.56-2
 
     - name: make 32-bit
-      run: make install objectsdir=./build PDDIR=./pd-0.55-0 PDINCLUDEDIR=./pd-0.55-0/src PDBINDIR=./pd-0.55-0/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
+      run: make install objectsdir=./build PDDIR=./pd-0.56-2 PDINCLUDEDIR=./pd-0.56-2/src PDBINDIR=./pd-0.56-2/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
 
     - name: upload
       uses: actions/upload-artifact@v4
