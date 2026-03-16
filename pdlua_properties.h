@@ -299,7 +299,7 @@ static void pdlua_properties_setupbuttons(t_pdlua_properties *p) {
                 "-ipadx", 10);
 }
 
-static void pdlua_properties(t_gobj *z, t_glist *owner) {
+static void pdlua_properties(t_gobj *z, t_glist *) {
     t_pdlua *pdlua = (t_pdlua *)z;
     t_pdlua_properties *p = &pdlua->properties;
 

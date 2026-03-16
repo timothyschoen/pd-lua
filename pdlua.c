@@ -1532,9 +1532,6 @@ static int pdlua_class_new(lua_State *L)
         /* a class with a "menu-open" method will have the "Open" item highlighted in the right-click menu */
         class_addmethod(c, (t_method)pdlua_menu_open, gensym("menu-open"), A_NULL);/* (mrpeach 20111025) */
         class_addmethod(c, (t_method)pdlua_dsp, gensym("dsp"), A_CANT, 0); /* timschoen 20240226 */
-
-        class_setpropertiesfn(c, pdlua_properties);
-        class_addmethod(c, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
     }
 
     if (c_gfx) {
@@ -1560,10 +1557,6 @@ static int pdlua_class_new(lua_State *L)
         pdlua_widgetbehavior.w_visfn      = pdlua_vis;
         pdlua_widgetbehavior.w_activatefn = pdlua_activate;
         class_setwidget(c_gfx, &pdlua_widgetbehavior);
-
-        class_setpropertiesfn(c_gfx, pdlua_properties);
-        class_addmethod(c_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
-
     }
 
     lua_pushlightuserdata(L, c);
@@ -2813,6 +2806,19 @@ static int pdlua_canvas_realizedollar(lua_State *L)
     return 0;
 }
 
+static int pdlua_setpropertiesfn(lua_State *L)
+{
+    t_pdlua *x = (t_pdlua *)lua_touserdata(L, 1);
+    if(x->pdlua_class) {
+        class_setpropertiesfn(x->pdlua_class, pdlua_properties);
+        class_addmethod(x->pdlua_class, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
+    }
+    if(x->pdlua_class_gfx) {
+        class_setpropertiesfn(x->pdlua_class_gfx, pdlua_properties);
+        class_addmethod(x->pdlua_class_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
+    }
+}
+
 static int pdlua_signal_setmultiout(lua_State *L)
 {
     char msg[MAXPDSTRING];
@@ -2962,6 +2968,9 @@ static void pdlua_init(lua_State *L)
     lua_settable(L, -3);
     lua_pushstring(L, "_error");
     lua_pushcfunction(L, pdlua_error);
+    lua_settable(L, -3);
+    lua_pushstring(L, "_set_propertiesfn");
+    lua_pushcfunction(L, pdlua_setpropertiesfn);
     lua_settable(L, -3);
 
     /* 20240906 ag: Added TIMEUNITPERMSEC, systime and timesince, to make

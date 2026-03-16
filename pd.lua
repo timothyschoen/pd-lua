@@ -391,6 +391,9 @@ function pd.Class:construct(sel, atoms)
     if type(self.paint) == "function" then
         pd._creategui(self._object)
     end
+    if(type(self.properties) == "function") then
+        pd._set_propertiesfn(self._object)
+    end
     self:postinitialize()
     return self
   else
