@@ -91,6 +91,29 @@ pd._perform_dsp = function (object, ...)
   end
 end
 
+-- draw properties
+pd._properties = function (object)
+  local obj = pd._objects[object]
+  if nil ~= obj and type(obj.properties) == "function" then
+        obj:properties()
+        return true
+  else
+        pd.post("not found")
+        return false
+  end
+end
+
+-- set properties
+pd._set_properties = function (object, method, args)
+  local obj = pd._objects[object]
+  if obj ~= nil and type(obj[method]) == "function" then
+        local propertiesmethod = obj[method]
+        propertiesmethod(obj, args) -- Passa `obj` explicitamente como `self`
+  else
+        pd._error(obj._object, "method ".. method .. " does not exist")
+  end
+end
+
 -- repaint method dispatcher
 pd._repaint = function (object)
   local obj = pd._objects[object]
@@ -461,6 +484,26 @@ end
 
 function pd.Class:set_args(args)
   pd._set_args(self._object, args)
+end
+
+function pd.Class:addproperties()
+    pd._properties_add(self._object)
+end
+
+function pd.Class:newframe(title, max_col)
+  pd._properties_newframe(self._object, title, max_col)
+end
+
+function pd.Class:addcheckbox(text, method, init_value)
+    pd._properties_addcheckbox(self._object, text, method, init_value)
+end
+
+function pd.Class:addtextinput(text, method, init_value, width)
+    pd._properties_addtextinput(self._object, text, method, init_value, width)
+end
+
+function pd.Class:addcolorpicker(text, method)
+    pd._properties_addcolorpicker(self._object, text, method)
 end
 
 function pd.Class:canvas_realizedollar(s)

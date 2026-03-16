@@ -515,9 +515,9 @@ static int fill_path(lua_State* L) {
 
     int coordinates_size = (2 * path->num_path_segments + 2) * sizeof(t_atom);
     t_atom* coordinates = getbytes(coordinates_size);
-    
+
     for (int i = 0; i < path->num_path_segments; i++) {
-        float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];        
+        float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
         SETFLOAT(coordinates + (i * 2), x);
         SETFLOAT(coordinates + (i * 2) + 1, y);
     }
@@ -751,7 +751,7 @@ static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed) {
     t_pdlua_gfx *gfx = &obj->gfx;
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 #ifndef PURR_DATA
-    
+
     if(layer < gfx->num_layers) {
         pdgui_vmess(0, "crs", cnv, "delete", layer == -1 ? gfx->object_tag : gfx->layer_tags[layer]);
     }
@@ -840,7 +840,7 @@ static int gfx_initialize(t_pdlua *obj)
     gfx->num_layers = 0;
     gfx->layer_tags = NULL;
     gfx->mouse_inside = 0;
-    
+
     pdlua_gfx_repaint(obj, 0);
     return 0;
 }
@@ -867,7 +867,7 @@ static int start_paint(lua_State* L) {
     }
 
     t_pdlua* obj = (t_pdlua*)lua_touserdata(L, 1);
-    
+
     t_pdlua_gfx *gfx = &obj->gfx;
     if(gfx->object_tag[0] == '\0')
     {
@@ -913,7 +913,7 @@ static int start_paint(lua_State* L) {
                 gfx->layer_tags = resizebytes(gfx->layer_tags, sizeof(char*) * gfx->num_layers, sizeof(char*) * new_num_layers);
             else
                 gfx->layer_tags = getbytes(sizeof(char*));
-            
+
             gfx->layer_tags[layer] = getbytes(64);
             snprintf(gfx->layer_tags[layer], 64, ".l%i%lx", layer, (long)obj);
             gfx->num_layers = new_num_layers;
@@ -937,7 +937,7 @@ static int start_paint(lua_State* L) {
         }
 #endif
         gfx->current_layer_tag = gfx->layer_tags[layer];
-        
+
         if(gfx->transforms) freebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform));
         gfx->num_transforms = 0;
         gfx->transforms = NULL;
@@ -1000,20 +1000,20 @@ static int end_paint(lua_State* L) {
 
     int scale = glist_getzoom(glist_getcanvas(obj->canvas));
     int layer = luaL_checknumber(L, 1) - 1;
-    
+
     // Draw iolets on top
     int xpos = text_xpix((t_object*)obj, obj->canvas);
     int ypos = text_ypix((t_object*)obj, obj->canvas);
 
     // TODO: I don't think we need to call drawiofor on each layer?
     glist_drawiofor(obj->canvas, (t_object*)obj, 1, gfx->object_tag, xpos, ypos, xpos + (gfx->width * scale), ypos + (gfx->height * scale));
-    
+
 #ifndef PURR_DATA
     if(!gfx->first_draw && gfx->order_tag[0] != '\0') {
-        
+
         // Move everything to below the order marker, to make sure redrawn stuff isn't always on top
         pdgui_vmess(0, "crss", cnv, "lower", gfx->object_tag, gfx->order_tag);
-        
+
         if(layer == 0 && gfx->num_layers > 1)
         {
             if(layer < gfx->num_layers) pdgui_vmess(0, "crss", cnv, "lower", gfx->current_layer_tag, gfx->layer_tags[layer + 1]);
@@ -1447,27 +1447,27 @@ static int draw_svg(lua_State* L) {
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
     int canvas_zoom = glist_getzoom(cnv);
-    
+
     // We can only apply scaling with an equal aspect ratio, so we only use the first scale coordinate
     float scale_x = canvas_zoom, scale_y = canvas_zoom;
     transform_size_float(gfx, &scale_x, &scale_y);
     float scale = (scale_x + scale_y) * 0.5f;
-    
+
     char* svg_text = strdup(luaL_checkstring(L, 1));
     uint64_t svg_hash = pdlua_image_hash((unsigned char*)svg_text, scale);
-    
+
     int x = luaL_checknumber(L, 2);
     int y = luaL_checknumber(L, 3);
-    
+
     transform_point(gfx, &x, &y);
 
-    
+
     x += text_xpix((t_object*)obj, obj->canvas) / canvas_zoom;
     y += text_ypix((t_object*)obj, obj->canvas) / canvas_zoom;
 
     x *= canvas_zoom;
     y *= canvas_zoom;
-    
+
     const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
@@ -1496,14 +1496,14 @@ static int draw_svg(lua_State* L) {
         pd_error(0, "[pdlua]: Failed to create rasterizer.");
         return 0;
     }
-    
+
     const int channels = 4;
     // Apply scale, limit size to object size
     // This is not perfect clipping, but it at least prevents accidental large images from freezing pd
     int w = (int)fmax(image->width * scale, gfx->width * canvas_zoom);
     int h = (int)fmax(image->height* scale, gfx->height * canvas_zoom);
     int image_size = w * h * channels;
-    
+
     unsigned char* bitmap_data = getbytes(image_size);
     if (!bitmap_data) {
         pd_error(0, "[pdlua]: Failed to allocate memory for bitmap.");
@@ -1511,7 +1511,7 @@ static int draw_svg(lua_State* L) {
     }
 
     nsvgRasterize(rast, image, 0, 0, scale, bitmap_data, w, h, w * channels);
-    
+
     // Convert bitmap data to png
     int png_size;
     unsigned char* png_buf = stbi_write_png_to_mem(bitmap_data, w * channels, w, h, channels, &png_size);
@@ -1519,11 +1519,11 @@ static int draw_svg(lua_State* L) {
         pd_error(0, "[pdlua]: Failed to encode PNG image.");
         return 0;
     }
-    
+
     // Encode PNG data to Base64
     char* encoded_png = pdlua_base64_encode((unsigned char*)png_buf, png_size);
     free(png_buf);
-    
+
     if (!encoded_png) {
         pd_error(0, "[pdlua]: Failed to encode PNG to Base64.");
         return 0;
@@ -1545,7 +1545,7 @@ static int draw_svg(lua_State* L) {
     snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, svg_hash);
     pdgui_vmess(0, "rrr s rs", "image", "create", "photo", image_name, "-data", encoded_png);
     pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y, "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
-    
+
     // Cleanup
     free(encoded_png);
     free(svg_text);
@@ -1576,7 +1576,7 @@ static int stroke_path(lua_State* L) {
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "line", 0, 0, 0, 0, "-width", stroke_width, "-fill", gfx->current_color, "-tags", 3, tags);
-    
+
     t_float* transformed_coordinates = getbytes(path->num_path_segments * 2 * sizeof(t_float));
     for (int i = 0; i < path->num_path_segments; i++) {
         float x =  path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
@@ -1586,7 +1586,7 @@ static int stroke_path(lua_State* L) {
     }
     pdgui_vmess(0, "crs F", cnv, "coords", tags[1], path->num_path_segments*2, transformed_coordinates);
     freebytes(transformed_coordinates, path->num_path_segments * 2 * sizeof(t_float));
-    
+
 #else // PURR_DATA
     gui_start_vmess("gui_luagfx_stroke_path", "xsssi", cnv, tags[2], tags[1],
                     gfx->current_color, stroke_width);
@@ -1804,3 +1804,465 @@ static int free_path(lua_State* L)
     freebytes(path->path_segments, path->num_path_segments_allocated * sizeof(int));
     return 0;
 }
+
+// ╭─────────────────────────────────────╮
+// │             PROPERTIES              │
+// ╰─────────────────────────────────────╯
+#ifndef PURR_DATA
+
+static void pdlua_properties_createdialog(t_pdlua_gfx *o)
+{
+    pdgui_vmess(0, "ssss", "toplevel", o->properties_panel.properties_receiver->s_name, "-class", "DialogWindow");
+    pdgui_vmess(0, "ssss", "wm", "title", o->properties_panel.properties_receiver->s_name, "{[mydialog] Properties}");
+    pdgui_vmess(0, "sss", "wm", "group", o->properties_panel.properties_receiver->s_name, ".");
+    pdgui_vmess(0, "sssii", "wm", "resizable", o->properties_panel.properties_receiver->s_name, 0, 0);
+
+    pdgui_vmess(0, "sss", "wm", "transient", o->properties_panel.properties_receiver->s_name, "$::focused_window");
+    pdgui_vmess(0, "ssss", o->properties_panel.properties_receiver->s_name, "configure", "-menu", "$::dialog_menubar");
+    pdgui_vmess(0, "sssfsf", o->properties_panel.properties_receiver->s_name, "configure", "-padx", 0.0f, "-pady", 0.0f);
+}
+
+static void pdlua_properties_updaterow(t_pdlua_gfx *o)
+{
+    o->properties_panel.current_col++;
+    if (o->properties_panel.current_col == o->properties_panel.max_col) {
+        o->properties_panel.current_row++;
+        o->properties_panel.current_col = 0; // not used for now
+    }
+}
+
+static void pdlua_properties_setupbuttons(t_pdlua_gfx *o) {
+    char buttonsId[MAXPDSTRING];
+    snprintf(buttonsId, MAXPDSTRING, ".%p.buttons", (void *)o);
+
+    char buttonCancelId[MAXPDSTRING];
+    char buttonApplyId[MAXPDSTRING];
+    char buttonOkId[MAXPDSTRING];
+    snprintf(buttonCancelId, MAXPDSTRING, ".%p.buttons.cancel", (void *)o);
+    snprintf(buttonApplyId, MAXPDSTRING, ".%p.buttons.apply", (void *)o);
+    snprintf(buttonOkId, MAXPDSTRING, ".%p.buttons.ok", (void *)o);
+
+    char destroyCommand[MAXPDSTRING];
+    snprintf(destroyCommand, MAXPDSTRING, "destroy .%p", (void *)o);
+
+    // Criando o frame dos botões
+    pdgui_vmess(0, "sssf", "frame", buttonsId, "-pady", 5.0f);
+    pdgui_vmess(0, "ssss", "pack", buttonsId, "-fill", "x");
+
+
+    // Cancel (Close window)
+    pdgui_vmess(0, "ssssss", "button", buttonCancelId, "-text", "Cancel", "-command",
+                destroyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId, "-side", "left", "-expand", 1, "-padx", 10,
+                "-ipadx", 10);
+
+    // Apply (send all data to pd and lua obj) for this must be necessary to save all the variables used in the object in a char [128][MAXPDSTRING],
+    // I don't think that this is good, or there is better solution?
+    // TODO: Need to dev the apply command
+    pdgui_vmess(0, "ssss", "button", buttonApplyId, "-text", "Apply");
+    // pdgui_vmess(0, "ssssss", "button", buttonApplyId, "-text", "Apply", "-command", command);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonApplyId, "-side", "left", "-expand", 1, "-padx", 10,
+                "-ipadx", 10);
+
+    // Ok
+    pdgui_vmess(0, "ssssss", "button", buttonOkId, "-text", "OK", "-command", destroyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonOkId, "-side", "left", "-expand", 1, "-padx", 10,
+                "-ipadx", 10);
+}
+
+static int pdlua_properties_newframe(lua_State *L)
+{
+
+    t_pdlua     *pdlua;
+    const char  *s;
+
+    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
+    {
+        pdlua = lua_touserdata(L, 1);
+        const char *title = lua_tostring(L, 2);
+        int col = lua_tonumber(L, 3);
+        t_pdlua_gfx *o = &pdlua->gfx;
+        if (o)
+        {
+            o->properties_panel.frame_count++;
+            char current_frameid[MAXPDSTRING];
+            snprintf(current_frameid, MAXPDSTRING, ".%p.main.frame%d", (void *)o, o->properties_panel.frame_count);
+            o->properties_panel.current_frame = gensym(current_frameid);
+
+            // raised, sunken, flat, ridge, solid, and groove.
+            // Create main frame for set of configurations
+            pdgui_vmess(0, "sssssi", "frame", current_frameid, "-relief", "groove", "-borderwidth", 1);
+            pdgui_vmess(0, "sssssssisi", "pack", current_frameid, "-side", "top", "-fill", "x", "-padx", 10,
+                        "-pady", 10);
+
+            // Title of the Frame
+            char labelid[MAXPDSTRING];
+            snprintf(labelid, MAXPDSTRING, "%s.title", current_frameid);
+            pdgui_vmess(0, "ssss", "label", labelid, "-text", title);
+            pdgui_vmess(0, "sssssf", "pack", labelid, "-side", "top", "-pady", 5.f);
+
+            // Create content frame with grid layout
+            char content_frameid[MAXPDSTRING];
+            snprintf(content_frameid, MAXPDSTRING, "%s.content", current_frameid);
+            pdgui_vmess(0, "ss", "frame", content_frameid);
+            pdgui_vmess(0, "ssss", "pack", content_frameid, "-side", "top", "-fill", "x");
+
+            // Configure grid with 2 equal columns
+            for (int i = 0; i < col; i++) {
+                pdgui_vmess(0, "sssisi", "grid", "columnconfigure", content_frameid, i, "-weight", 1);
+            }
+            o->properties_panel.current_frame = gensym(content_frameid);
+            o->properties_panel.max_col = col;
+            o->properties_panel.current_col = 0;
+            o->properties_panel.current_row = 0;
+        } else{
+            mylua_error(__L(), pdlua, "properties");
+        }
+    } else{
+        mylua_error(__L(), pdlua, "properties");
+
+    }
+    return 0;
+}
+
+static int pdlua_properties_addcheckbox(lua_State *L)
+{
+    t_pdlua     *pdlua;
+    const char  *s;
+
+    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
+    {
+        pdlua = lua_touserdata(L, 1);
+        const char *text = lua_tostring(L, 2);
+        const char *method = lua_tostring(L, 3);
+        int init_value = lua_tonumber(L, 4);
+        if (pdlua == NULL){
+            return 0 ;
+        }
+
+        t_pdlua_gfx *o = &pdlua->gfx;
+        if (o)
+        {
+            char pdsend[MAXPDSTRING];
+            char checkid[MAXPDSTRING];
+            char checkvariable[MAXPDSTRING];
+            char sanitized_frame[MAXPDSTRING];
+            o->properties_panel.checkbox_count++;
+
+            // Sanitize frame name (replace '.' with '_')
+            snprintf(sanitized_frame, MAXPDSTRING, "%s", o->properties_panel.current_frame->s_name);
+            for (char *p = sanitized_frame; *p != '\0'; p++) {
+                if (*p == '.') {
+                    *p = '_';
+                }
+            }
+
+            // Generate unique variable name
+            snprintf(checkvariable, MAXPDSTRING, "::checkbox%d_%s_state", o->properties_panel.checkbox_count,
+                     sanitized_frame);
+
+            // Initialize the Tcl variable to 0 (unchecked)
+            pdgui_vmess(0, "ssi", "set", checkvariable, init_value);
+
+            // Build the pdsend command
+            snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties checkbox %s $%s]",
+                     o->properties_panel.properties_receiver->s_name, method, checkvariable);
+
+            // Create the checkbox
+            snprintf(checkid, MAXPDSTRING, "%s.check%d", o->properties_panel.current_frame->s_name, o->properties_panel.checkbox_count);
+            pdgui_vmess(0, "ssssssss", "checkbutton", checkid, "-text", text, "-variable", checkvariable,
+                        "-command", pdsend);
+
+            pdgui_vmess(0, "sssisi", "grid", checkid, "-row", o->properties_panel.current_row, "-column", o->properties_panel.current_col,
+                        "-sticky", "we");
+            pdlua_properties_updaterow(o);
+        } else {
+            mylua_error(__L(), pdlua, "addcheckbox");
+        }
+    } else {
+        mylua_error(__L(), pdlua, "addcheckbox");
+    }
+    return 0;
+}
+
+
+static int pdlua_properties_addtextinput(lua_State *L)
+{
+    t_pdlua     *pdlua;
+    const char  *s;
+
+    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
+    {
+        pdlua = lua_touserdata(L, 1);
+        const char *text = lua_tostring(L, 2);
+        const char *method = lua_tostring(L, 3);
+        const char *init_value = lua_tostring(L, 4);
+        int width = lua_tonumber(L, 5);
+        if (pdlua == NULL){
+            mylua_error(__L(), pdlua, "pdlua is NULL");
+            return 0 ;
+        }
+
+        t_pdlua_gfx *o = &pdlua->gfx;
+        if (o)
+        {
+            char pdsend[MAXPDSTRING];
+            char textid[MAXPDSTRING];
+            char buttonid[MAXPDSTRING];
+            char entryid[MAXPDSTRING];
+
+            char numvariable[MAXPDSTRING];
+
+            char sanitized_frame[MAXPDSTRING];
+            o->properties_panel.numberbox_count++;
+
+            // Sanitize frame name (replace '.' with '_')
+            snprintf(sanitized_frame, MAXPDSTRING, "%s", o->properties_panel.current_frame->s_name);
+            for (char *p = sanitized_frame; *p != '\0'; p++) {
+                if (*p == '.') {
+                    *p = '_';
+                }
+            }
+
+            // Variable save the value of gui obj
+            snprintf(numvariable, MAXPDSTRING, "::numberbox%d_%s_value", o->properties_panel.numberbox_count,
+                     sanitized_frame);
+            pdgui_vmess(0, "sss", "set", numvariable, init_value);
+
+            // Command to send it to pd
+            snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties numberbox %s $%s]",
+                     o->properties_panel.properties_receiver->s_name, method, numvariable);
+
+            // container for button to set and text input
+            char text_button_frame[MAXPDSTRING];
+            snprintf(text_button_frame, MAXPDSTRING, "%s.text_button_frame_%d", o->properties_panel.current_frame->s_name,
+                     o->properties_panel.numberbox_count);
+            pdgui_vmess(0, "sssssisisi", "frame", text_button_frame, "-relief", "solid", "-borderwidth", 1,
+                        "-padx", 5, "-pady", 5);
+
+            // create text for identification
+            snprintf(textid, MAXPDSTRING, "%s.text%d", text_button_frame, o->properties_panel.numberbox_count);
+            pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+
+            // Create the number entry box
+            snprintf(entryid, MAXPDSTRING, "%s.numberbox%d", text_button_frame, o->properties_panel.numberbox_count);
+            pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", numvariable, "-width", width);
+
+            // Create the set button
+            snprintf(buttonid, MAXPDSTRING, "%s.setbutton%d", text_button_frame, o->properties_panel.numberbox_count);
+            pdgui_vmess(0, "sssssssisi", "button", buttonid, "-text", "Set", "-command", pdsend, "-padx",
+                        10, "-pady", 0);
+
+            // Pack the entry and button side by side
+            pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+            pdgui_vmess(0, "ssss", "pack", entryid, "-side", "left");
+            pdgui_vmess(0, "ssss", "pack", buttonid, "-side", "right");
+            pdgui_vmess(0, "sssisisssi", "grid", text_button_frame, "-row", o->properties_panel.current_row, "-column",
+                        o->properties_panel.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
+            pdlua_properties_updaterow(o);
+        } else{
+            mylua_error(__L(), pdlua, "pdlua_gfx is NULL");
+        }
+    } else {
+        mylua_error(__L(), pdlua, "Types checks failed");
+    }
+    return 0;
+}
+
+// static int pdlua_dialog_createcolorpicker(t_pdlua *x, const char *text, const char *method) {
+static int pdlua_properties_addcolorpicker(lua_State *L) {
+    t_pdlua     *pdlua;
+    const char  *s;
+
+    if (lua_islightuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
+    {
+        pdlua = lua_touserdata(L, 1);
+        const char *text = lua_tostring(L, 2);
+        const char *method = lua_tostring(L, 3);
+        // const char *init_value = lua_tostring(L, 4); // TODO: set color here with table maybe?
+        if (pdlua == NULL){
+            return 0 ;
+        }
+
+        t_pdlua_gfx *o = &pdlua->gfx;
+        if (o)
+        {
+
+            char pdsend[MAXPDSTRING];
+            char buttonid[MAXPDSTRING];
+            char colorvariable[MAXPDSTRING];
+            char sanitized_frame[MAXPDSTRING];
+            o->properties_panel.colorpicker_count++;
+
+            // Sanitize frame name (replace '.' with '_')
+            snprintf(sanitized_frame, MAXPDSTRING, "%s", o->properties_panel.current_frame->s_name);
+            for (char *p = sanitized_frame; *p != '\0'; p++) {
+                if (*p == '.') {
+                    *p = '_';
+                }
+            }
+
+            // Generate unique variable name
+            snprintf(colorvariable, MAXPDSTRING, "::colorpicker%d_%s_value", o->properties_panel.colorpicker_count,
+                     sanitized_frame);
+
+            // Initialize the Tcl variable to a default color
+            pdgui_vmess(0, "sss", "set", colorvariable, "#ffffff");
+
+            // Build the pdsend command to trigger color picker and send result
+            snprintf(pdsend, MAXPDSTRING,
+                "eval pdsend [concat %s _properties colorpicker %s [tk_chooseColor -initialcolor {#ffffff} -title {Choose color}]]",
+                    o->properties_panel.properties_receiver->s_name, method);
+
+            // Create the color picker button with the constructed command
+            snprintf(buttonid, MAXPDSTRING, "%s.colorpicker%d", o->properties_panel.current_frame->s_name,
+                     o->properties_panel.colorpicker_count);
+            pdgui_vmess(0, "ssssss", "button", buttonid, "-text", text, "-command", pdsend);
+
+            pdgui_vmess(0, "sssisi", "grid", buttonid, "-row", o->properties_panel.current_row, "-column", o->properties_panel.current_col,
+                        "-sticky", "we");
+            pdlua_properties_updaterow(o);
+
+        } else {
+            mylua_error(__L(), pdlua, "addcolorpicker");
+        }
+    } else {
+        mylua_error(__L(), pdlua, "addcolorpicker");
+    }
+}
+
+
+static void pdlua_properties(t_gobj *z, t_glist *owner) {
+    t_pdlua *pdlua = (t_pdlua *)z;
+    t_pdlua_gfx *o = &pdlua->gfx;
+
+    char receiver[MAXPDSTRING];
+    snprintf(receiver, MAXPDSTRING, ".%p", o);
+    o->properties_panel.properties_receiver = gensym(receiver);
+    o->properties_panel.current_frame = NULL;
+    pd_bind(&pdlua->pd.ob_pd, o->properties_panel.properties_receiver); // new to unbind
+
+    pdlua_properties_createdialog(o); // <-- create hidden window
+
+    // main window
+    char frameId[MAXPDSTRING];
+    snprintf(frameId, MAXPDSTRING, ".%p.main", (void *)o);
+    pdgui_vmess(0, "sss", "wm", "deiconify", o->properties_panel.properties_receiver->s_name); // <- on sucess show the window
+    pdgui_vmess(0, "sssf", "frame", frameId, "-padx", 15.0f, "-pady", 15.0f);
+    pdgui_vmess(0, "sssssf", "pack", frameId, "-fill", "both", "-expand", 4.0f);
+    pdgui_vmess(0, "sssfsf", "pack", frameId, "-pady", 10.f, "-padx", 10.f);
+
+    // call _properties
+    lua_getglobal(__L(), "pd");
+    lua_getfield (__L(), -1, "_properties");
+    lua_pushlightuserdata(__L(), pdlua);
+    if (lua_pcall(__L(), 1, 1, 0))
+    {
+        mylua_error(__L(), pdlua, "properties");
+        pdgui_vmess(0, "ss", "destroy", o->properties_panel.properties_receiver->s_name);
+        return;
+    }
+
+    // Get the return value (Lua pushes it onto the stack)
+    int result = lua_toboolean(__L(), -1); // Converts Lua boolean to C int (1 = true, 0 = false)
+    lua_pop(__L(), 1); // Remove the result from the stack
+    if (!result)
+    {
+        pdgui_vmess(0, "ss", "destroy", o->properties_panel.properties_receiver->s_name);
+        return;
+    }
+    pdlua_properties_setupbuttons(o); // <- this is independed of all previous containers
+
+}
+
+#include <ctype.h>
+
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol *s, int argc, t_atom *argv)
+{
+    if (argc < 2)
+        return;
+
+    lua_getglobal(__L(), "pd");
+    lua_getfield(__L(), -1, "_set_properties");
+    lua_remove(__L(), -2);
+
+    lua_pushlightuserdata(__L(), o);
+    lua_pushstring(__L(), atom_getsymbol(argv + 1)->s_name);
+    lua_newtable(__L()); // Criando a tabela
+
+    const char *guitype = atom_getsymbol(argv)->s_name;
+    if (strcmp(guitype, "colorpicker") == 0)
+    {
+        const char *hexcolor = atom_getsymbol(argv + 2)->s_name;
+        int isvalid = 1;
+
+        if (hexcolor == NULL || hexcolor[0] != '#' || strlen(hexcolor) != 7) {
+            isvalid = 0;
+        } else {
+            for (int i = 1; i < 7; i++) {
+                if (!isxdigit(hexcolor[i])) isvalid = 0;
+            }
+        }
+
+        if (!isvalid) {
+            pd_error(o, "Invalid color string");
+            return;
+        }
+
+        int r, g, b;
+        if (sscanf(hexcolor + 1, "%2x%2x%2x", &r, &g, &b) == 3) {
+            lua_newtable(__L());
+            lua_pushinteger(__L(), r);
+            lua_rawseti(__L(), -2, 1);
+            lua_pushinteger(__L(), g);
+            lua_rawseti(__L(), -2, 2);
+            lua_pushinteger(__L(), b);
+            lua_rawseti(__L(), -2, 3);
+            lua_rawseti(__L(), -2, 1);
+        } else {
+            pd_error(o, "Invalid color format in sscanf");
+            return;
+        }
+    } else{
+        for (int i = 2; i < argc; i++)
+        {
+            if (argv[i].a_type == A_FLOAT)
+            {
+                lua_pushnumber(__L(), atom_getfloat(argv + i));
+                lua_rawseti(__L(), -2, i - 1); // Store at index (1-based in Lua)
+            }
+            else if (argv[i].a_type == A_SYMBOL)
+            {
+                lua_pushstring(__L(), atom_getsymbol(argv + i)->s_name);
+                lua_rawseti(__L(), -2, i - 1);
+            }
+        }
+    }
+
+    if (lua_pcall(__L(), 3, 0, 0))
+    {
+        mylua_error(__L(), o, "_set_properties"); // Handle error
+        lua_pop(__L(), 1); // Pop error message
+        return;
+    }
+}
+
+static int pdlua_properties_add(lua_State *L)
+{
+    t_pdlua *lua_class;
+    const char  *s;
+    if (lua_islightuserdata(L, 1))
+    {
+        lua_class = lua_touserdata(L, 1);
+        if (lua_class)
+        {
+            // NOTE: Something like this would be nice
+            // class_setpropertiesfn((t_class *)lua_class->pd.te_g.g_pd, pdlua_properties);
+            // return 1;
+        }
+    }
+    return 0;
+}
+
+
+#endif
