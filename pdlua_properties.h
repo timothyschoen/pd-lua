@@ -145,9 +145,7 @@ static int pdlua_properties_addint(lua_State *L)
     if (lua_isuserdata(L, 1) &&
         lua_isstring(L, 2) &&
         lua_isstring(L, 3) &&
-        lua_isnumber(L, 4) &&
-        lua_isnumber(L, 5) &&
-        lua_isnumber(L, 6))
+        lua_isnumber(L, 4))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         t_atom atoms[5];
@@ -155,8 +153,8 @@ static int pdlua_properties_addint(lua_State *L)
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
         SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
         SETFLOAT(&atoms[2], lua_tonumber(L, 4));
-        SETFLOAT(&atoms[3], lua_tonumber(L, 5));
-        SETFLOAT(&atoms[4], lua_tonumber(L, 6));
+        SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
+        SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
 
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_number_property"), 5, atoms);
     }
@@ -173,9 +171,7 @@ static int pdlua_properties_addfloat(lua_State *L)
     if (lua_isuserdata(L, 1) &&
         lua_isstring(L, 2) &&
         lua_isstring(L, 3) &&
-        lua_isnumber(L, 4) &&
-        lua_isnumber(L, 5) &&
-        lua_isnumber(L, 6))
+        lua_isnumber(L, 4))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         t_atom atoms[5];
@@ -183,8 +179,8 @@ static int pdlua_properties_addfloat(lua_State *L)
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
         SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
         SETFLOAT(&atoms[2], lua_tonumber(L, 4));
-        SETFLOAT(&atoms[3], lua_tonumber(L, 5));
-        SETFLOAT(&atoms[4], lua_tonumber(L, 6));
+        SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
+        SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
 
         pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_number_property"), 5, atoms);
     }
