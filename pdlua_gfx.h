@@ -295,9 +295,8 @@ static int gfx_initialize(t_pdlua *obj)
 
 static int set_size(lua_State* L)
 {
-    if (!lua_islightuserdata(L, 1)) {
+    if (!lua_islightuserdata(L, 1))
         return 0;
-    }
 
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     obj->gfx.width = luaL_checknumber(L, 2);
@@ -349,14 +348,7 @@ static int set_color(lua_State* L) {
     SETFLOAT(args, luaL_checknumber(L, 1)); // r
     SETFLOAT(args + 1, luaL_checknumber(L, 2)); // g
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // b
-
-    if (lua_gettop(L) >= 4) { // object and table are already on stack, hence 5
-        // alpha (optional, default to 1.0)
-        SETFLOAT(args + 3, luaL_checknumber(L, 4));
-    }
-    else {
-        SETFLOAT(args + 3, 1.0f);
-    }
+    SETFLOAT(args + 3, luaL_optnumber(L, 4, 1.0f)); // alpha (optional, default to 1.0)
     plugdata_draw(obj, gfx->current_layer, gensym("lua_set_color"), 4, args);
     return 0;
 }
@@ -379,7 +371,7 @@ static int stroke_ellipse(lua_State* L) {
     SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // width
+    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // stroke width (optional, default to 1.0)
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_ellipse"), 5, args);
     return 0;
 }
@@ -409,7 +401,7 @@ static int stroke_rect(lua_State* L) {
     SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner_radius
+    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // stroke width (optional, default to 1.0)
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rect"), 5, args);
     return 0;
 }
@@ -434,7 +426,7 @@ static int stroke_rounded_rect(lua_State* L) {
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
     SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner_radius
-    SETFLOAT(args + 5, luaL_checknumber(L, 6)); // width
+    SETFLOAT(args + 5, luaL_optnumber(L, 6, 1.0f)); // stroke width (optional, default to 1.0)
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rounded_rect"), 6, args);
     return 0;
 }
@@ -446,9 +438,8 @@ static int draw_line(lua_State* L) {
     SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // line width
+    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // line width (optional, default to 1.0)
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_line"), 5, args);
-
     return 0;
 }
 
@@ -460,7 +451,9 @@ static int draw_text(lua_State* L) {
     SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
     SETFLOAT(args + 3, luaL_checknumber(L, 4)); // w
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // h
+    SETFLOAT(args + 4, luaL_optnumber(L, 5, 12.0f)); // font size
+    // FIXME: default font size of 12 seems arbitrary here. how can we get plugdata's fontsize?
+    // FIXME: ignoring the optional alignment parameter for plugdata for now
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_text"), 5, args);
     return 0;
 }
@@ -487,7 +480,7 @@ static int stroke_path(lua_State* L) {
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
     t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
-    int stroke_width = luaL_checknumber(L, 2) * glist_getzoom(cnv);
+    int stroke_width = luaL_optnumber(L, 2, 1.0f) * glist_getzoom(cnv); // optional, default to 1.0
 
     int coordinates_size = (2 * path->num_path_segments + 2) * sizeof(t_atom);
     t_atom* coordinates = getbytes(coordinates_size);
@@ -846,9 +839,8 @@ static int gfx_initialize(t_pdlua *obj)
 
 static int set_size(lua_State* L)
 {
-    if (!lua_islightuserdata(L, 1)) {
+    if (!lua_islightuserdata(L, 1))
         return 0;
-    }
 
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     obj->gfx.width = luaL_checknumber(L, 2);
@@ -1057,10 +1049,7 @@ static int set_color(lua_State* L) {
     gfx->current_color[7] = '\0';
 #else
     // ... but it is in Purr Data (nw.js gui)
-    int a = 255;
-    if (lua_gettop(L) >= 4) {
-        a = luaL_checknumber(L, 4)*255;
-    }
+    a = luaL_optnumber(L, 4, 1.0f) * 255;
     snprintf(gfx->current_color, 10, "#%02X%02X%02X%02X", r, g, b, a);
     gfx->current_color[9] = '\0';
 #endif
@@ -1103,7 +1092,7 @@ static int stroke_ellipse(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    int line_width = luaL_checknumber(L, 5) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 5, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
     const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
@@ -1177,7 +1166,7 @@ static int stroke_rect(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    int line_width = luaL_checknumber(L, 5) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 5, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
     const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
@@ -1244,7 +1233,7 @@ static int stroke_rounded_rect(lua_State* L) {
     int radius_x = radius * glist_getzoom(cnv);
     int radius_y = radius * glist_getzoom(cnv);
     transform_size(gfx, &radius_x, &radius_y);
-    int line_width = luaL_checknumber(L, 6) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 6, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
     const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
@@ -1290,7 +1279,7 @@ static int draw_line(lua_State* L) {
     int y1 = luaL_checknumber(L, 2);
     int x2 = luaL_checknumber(L, 3);
     int y2 = luaL_checknumber(L, 4);
-    int line_width = luaL_checknumber(L, 5);
+    int line_width = luaL_optnumber(L, 5, 1.0f); // line width (optional, default to 1.0)
 
     transform_point(gfx, &x1, &y1);
     transform_point(gfx, &x2, &y2);
@@ -1334,8 +1323,9 @@ static int draw_text(lua_State* L) {
     int x = luaL_checknumber(L, 2);
     int y = luaL_checknumber(L, 3);
     int w = luaL_checknumber(L, 4);
-    int font_height = luaL_checknumber(L, 5);
-    font_height = sys_hostfontsize(font_height, glist_getzoom(cnv));
+    // default to standard font size
+    int font_height = sys_hostfontsize(luaL_optnumber(L, 5, glist_getfont(cnv)), glist_getzoom(cnv));
+    int alignment = luaL_optinteger(L, 6, 0); // Defaults to TOP_LEFT
 
     transform_point(gfx, &x, &y);
     transform_size(gfx, &w, &font_height);
@@ -1351,12 +1341,26 @@ static int draw_text(lua_State* L) {
     const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
+    // Convert alignment value to tcl/tk anchor point
+    const char* anchor;
+    switch (alignment) {
+        case 1:  anchor = "n"; break;      // TOP_CENTER
+        case 2:  anchor = "ne"; break;     // TOP_RIGHT
+        case 3:  anchor = "w"; break;      // CENTER_LEFT
+        case 4:  anchor = "center"; break; // CENTER
+        case 5:  anchor = "e"; break;      // CENTER_RIGHT
+        case 6:  anchor = "sw"; break;     // BOTTOM_LEFT
+        case 7:  anchor = "s"; break;      // BOTTOM_CENTER
+        case 8:  anchor = "se"; break;     // BOTTOM_RIGHT
+        default: anchor = "nw"; break;     // TOP_LEFT
+    }
+
     pdgui_vmess(0, "crr ii rs ri rs rS", cnv, "create", "text",
-                0, 0, "-anchor", "nw", "-width", w, "-text", text, "-tags", 3, tags);
+                0, 0, "-anchor", anchor, "-width", w, "-text", text, "-tags", 3, tags);
 
     t_atom fontatoms[3];
     SETSYMBOL(fontatoms+0, gensym(sys_font));
-    SETFLOAT (fontatoms+1, -font_height); // Size is wrong on hi-dpi Windows is this is not negative
+    SETFLOAT (fontatoms+1, -font_height); // Size is wrong on hi-dpi Windows if this is not negative
     SETSYMBOL(fontatoms+2, gensym(sys_fontweight));
 
     pdgui_vmess(0, "crs rA rs rs", cnv, "itemconfigure", tags[1],
@@ -1553,11 +1557,9 @@ static int stroke_path(lua_State* L) {
 
     t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     if(path->num_path_segments < 3)
-    {
         return 0;
-    }
 
-    int stroke_width = luaL_checknumber(L, 2) * glist_getzoom(cnv);
+    int stroke_width = luaL_optnumber(L, 2, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
     int obj_x = text_xpix((t_object*)obj, obj->canvas);
     int obj_y = text_ypix((t_object*)obj, obj->canvas);
     int canvas_zoom = glist_getzoom(cnv);
@@ -1602,9 +1604,7 @@ static int fill_path(lua_State* L) {
 
     t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     if(path->num_path_segments < 3)
-    {
         return 0;
-    }
 
     // Apply transformations to all coordinates
     int obj_x = text_xpix((t_object*)obj, obj->canvas);
@@ -1647,15 +1647,9 @@ static int translate(lua_State* L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
 
     if(gfx->num_transforms == 0)
-    {
         gfx->transforms = getbytes(sizeof(gfx_transform));
-
-    }
     else
-    {
         gfx->transforms = resizebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform), (gfx->num_transforms + 1) * sizeof(gfx_transform));
-
-    }
 
     gfx->transforms[gfx->num_transforms].type = TRANSLATE;
     gfx->transforms[gfx->num_transforms].x = luaL_checknumber(L, 1);
@@ -1691,12 +1685,11 @@ static void add_path_segment(t_path_state* path, float x, float y)
     int path_segment_space = (path->num_path_segments + 1) * 2;
     int old_size = path->num_path_segments_allocated;
     int new_size = MAX(path_segment_space, path->num_path_segments_allocated);
-    if(!path->num_path_segments_allocated) {
+
+    if(!path->num_path_segments_allocated)
         path->path_segments = (float*)getbytes(new_size * sizeof(float));
-    }
-    else {
+    else
         path->path_segments = (float*)resizebytes(path->path_segments, old_size * sizeof(float), new_size * sizeof(float));
-    }
 
     path->num_path_segments_allocated = new_size;
 
