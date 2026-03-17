@@ -105,16 +105,6 @@
 # define UNUSED(x) x
 #endif
 
-#if defined(__GNUC__) /* covers both GCC and Clang */
-#define PD_NEWMETHOD_CAST(f) \
-    _Pragma("GCC diagnostic push") \
-    _Pragma("GCC diagnostic ignored \"-Wcast-function-type\"") \
-    (t_newmethod)(f) \
-    _Pragma("GCC diagnostic pop")
-#else
-#define PD_NEWMETHOD_CAST(f) (t_newmethod)(f)
-#endif
-
 /* BAD: end of bad section */
 
 /* If defined, PDLUA_DEBUG lets pdlua post a lot of text */
@@ -1521,18 +1511,20 @@ static int pdlua_class_new(lua_State *L)
     
     snprintf(name_gfx, MAXPDSTRING-1, "%s:gfx", name);
     PDLUA_DEBUG3("pdlua_class_new: L is %p, name is %s stack top is %d", L, name, lua_gettop(L));
-    c = class_new(global_gensym((char *) name), PD_NEWMETHOD_CAST(pdlua_new),
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+    c = class_new(global_gensym((char *) name), (t_newmethod)pdlua_new,
         (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
     if (strcmp(name, "pdlua") && strcmp(name, "pdluax")) {
         // Shadow class for graphics objects. This is an exact clone of the
         // regular (non-gui) class, except that it has a different
         // widgetbehavior. We only need this for the regular Lua objects, the
         // pdlua and pdluax built-ins don't have this.
-        c_gfx = class_new(global_gensym((char *) name_gfx), PD_NEWMETHOD_CAST(pdlua_new),
+        c_gfx = class_new(global_gensym((char *) name_gfx), (t_newmethod)pdlua_new,
                 (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
         class_sethelpsymbol(c_gfx, gensym((char *) name));
     }
-    
+#pragma GCC diagnostic pop
     // Let plugdata know this class is a lua object
 #if PLUGDATA
     plugdata_register_class(name);
