@@ -29,12 +29,21 @@ typedef struct _gfx_transform
 typedef struct _pdlua_properties
 {
 #ifndef PLUGDATA
+#ifndef PURR_DATA
     t_symbol *current_frame;
     t_symbol *properties_receiver;
     int frame_count;
     int property_count;
     int max_col, max_row;
     int current_col, current_row;
+#else
+   int property_count;
+   int max_properties;
+   char **names;
+   char **types;
+   char **values;
+   char **callbacks;
+#endif
 #else
     void(*plugdata_properties_callback)(void*, t_symbol*, int, t_atom*); // Callback to add properties in plugdata
 #endif
