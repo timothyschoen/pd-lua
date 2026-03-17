@@ -26,8 +26,14 @@
 #include "svg/nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "svg/nanosvgrast.h"
+
+#define STBI_NO_THREAD_LOCALS
+#define STB_IMAGE_IMPLEMENTATION
+#include "svg/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "svg/stb_image_write.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "svg/stb_image_resize2.h"
 #endif
 
 #ifdef PURR_DATA
@@ -74,6 +80,7 @@ static int stroke_rounded_rect(lua_State* L);
 static int draw_line(lua_State* L);
 static int draw_text(lua_State* L);
 static int draw_svg(lua_State* L);
+static int draw_image(lua_State* L);
 
 static int start_path(lua_State* L);
 static int line_to(lua_State* L);
@@ -227,6 +234,7 @@ static const luaL_Reg gfx_methods[] = {
     {"draw_line", draw_line},
     {"draw_text", draw_text},
     {"draw_svg", draw_svg},
+    {"draw_image", draw_image},
     {"stroke_path", stroke_path},
     {"fill_path", fill_path},
     {"fill_all", fill_all},
@@ -477,6 +485,21 @@ static int draw_svg(lua_State* L) {
     SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
 
     plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_svg"), 3, args);
+    return 0;
+}
+
+static int draw_image(lua_State* L) {
+    t_pdlua_gfx *gfx = pop_graphics_context(L);
+    t_pdlua *obj = gfx->object;
+
+    t_canvas *cnv = glist_getcanvas(obj->canvas);
+
+    t_atom args[3];
+    SETSYMBOL(args, gensym(luaL_checkstring(L, 1)));
+    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
+    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
+
+    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_image"), 3, args);
     return 0;
 }
 
@@ -1487,14 +1510,14 @@ static int draw_svg(lua_State* L) {
     // First parse svg text with nanosvg
     struct NSVGimage* image = nsvgParse(svg_text, "px", 96);
     if (!image) {
-        pd_error(0, "[pdlua]: Failed to parse SVG data.");
+        pd_error(0, "[pdlua] draw_svg: Failed to parse SVG data.");
         return 0;
     }
 
     // Then rasterize to a bitmap image
     struct NSVGrasterizer* rast = nsvgCreateRasterizer();
     if (!rast) {
-        pd_error(0, "[pdlua]: Failed to create rasterizer.");
+        pd_error(0, "[pdlua] draw_svg: Failed to create rasterizer.");
         return 0;
     }
 
@@ -1507,7 +1530,7 @@ static int draw_svg(lua_State* L) {
 
     unsigned char* bitmap_data = getbytes(image_size);
     if (!bitmap_data) {
-        pd_error(0, "[pdlua]: Failed to allocate memory for bitmap.");
+        pd_error(0, "[pdlua] draw_svg: Failed to allocate memory for bitmap.");
         return 0;
     }
 
@@ -1517,7 +1540,7 @@ static int draw_svg(lua_State* L) {
     int png_size;
     unsigned char* png_buf = stbi_write_png_to_mem(bitmap_data, w * channels, w, h, channels, &png_size);
     if (!png_buf || png_size <= 0) {
-        pd_error(0, "[pdlua]: Failed to encode PNG image.");
+        pd_error(0, "[pdlua] draw_svg: Failed to encode PNG image.");
         return 0;
     }
 
@@ -1526,7 +1549,7 @@ static int draw_svg(lua_State* L) {
     free(png_buf);
 
     if (!encoded_png) {
-        pd_error(0, "[pdlua]: Failed to encode PNG to Base64.");
+        pd_error(0, "[pdlua] draw_svg: Failed to encode PNG to Base64.");
         return 0;
     }
 
@@ -1553,6 +1576,165 @@ static int draw_svg(lua_State* L) {
     freebytes(bitmap_data, image_size);
 #else // PURR_DATA
     // TODO: implement for purr-data, probably just send the svg text over?
+#endif
+    return 0;
+}
+
+static int draw_image(lua_State* L) {
+    t_pdlua_gfx *gfx = pop_graphics_context(L);
+    t_pdlua *obj = gfx->object;
+
+    t_canvas *cnv = glist_getcanvas(obj->canvas);
+    int canvas_zoom = glist_getzoom(cnv);
+
+    float scale_x = canvas_zoom, scale_y = canvas_zoom;
+    transform_size_float(gfx, &scale_x, &scale_y);
+    float scale = (scale_x + scale_y) * 0.5f;
+
+    const char *image_path = luaL_checkstring(L, 1);
+    int x = luaL_checknumber(L, 2);
+    int y = luaL_checknumber(L, 3);
+
+    uint64_t image_hash = pdlua_image_hash((unsigned char*)image_path, scale);
+
+    transform_point(gfx, &x, &y);
+    x += text_xpix((t_object*)obj, obj->canvas) / canvas_zoom;
+    y += text_ypix((t_object*)obj, obj->canvas) / canvas_zoom;
+    x *= canvas_zoom;
+    y *= canvas_zoom;
+
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+
+    char image_name[64];
+    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, image_hash);
+
+#ifndef PURR_DATA
+    // Fast path: scaled image already uploaded to Tk
+    for (int i = 0; i < gfx->num_images; i++) {
+        if (gfx->images[i] == image_hash) {
+            pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y,
+                        "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
+            return 0;
+        }
+    }
+
+    // Locate the file through Pd's search path
+    char dirresult[MAXPDSTRING];
+    char *nameresult = NULL;
+    int fd = canvas_open(obj->canvas, image_path, "",
+                         dirresult, &nameresult, MAXPDSTRING, 0);
+    if (fd < 0) {
+        pd_error(obj, "[pdlua] draw_image: cannot open '%s'", image_path);
+        return 0;
+    }
+
+    FILE *fp = fdopen(fd, "rb");
+    if (!fp) {
+        pd_error(obj, "[pdlua] draw_image: fdopen failed");
+        sys_close(fd);
+        return 0;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    if (file_size <= 0) {
+        pd_error(obj, "[pdlua] draw_image: empty file '%s'", image_path);
+        fclose(fp);
+        return 0;
+    }
+
+    unsigned char *file_data = getbytes((size_t)file_size);
+    if (!file_data) {
+        pd_error(obj, "[pdlua] draw_image: out of memory");
+        fclose(fp);
+        return 0;
+    }
+
+    if ((long)fread(file_data, 1, (size_t)file_size, fp) != file_size) {
+        pd_error(obj, "[pdlua] draw_image: read error for '%s'", image_path);
+        freebytes(file_data, (size_t)file_size);
+        fclose(fp);
+        return 0;
+    }
+    fclose(fp);
+
+    // Decode image with stb_image (handles PNG, JPG, GIF, BMP, etc)
+    int src_w, src_h, channels;
+    unsigned char *src_pixels = stbi_load_from_memory(file_data, (int)file_size,
+                                                       &src_w, &src_h, &channels, 4);
+    freebytes(file_data, (size_t)file_size);
+
+    if (!src_pixels) {
+        pd_error(obj, "[pdlua] draw_image: stb_image decode failed for '%s': %s",
+                 image_path, stbi_failure_reason());
+        return 0;
+    }
+
+    // Compute scaled dimensions
+    int dst_w = (int)(src_w * scale + 0.5f);
+    int dst_h = (int)(src_h * scale + 0.5f);
+    if (dst_w < 1) dst_w = 1;
+    if (dst_h < 1) dst_h = 1;
+
+    unsigned char *dst_pixels = NULL;
+
+    if (dst_w == src_w && dst_h == src_h) {
+        // No resize needed, use source directly
+        dst_pixels = src_pixels;
+    } else {
+        dst_pixels = getbytes(dst_w * dst_h * 4);
+        if (!dst_pixels) {
+            pd_error(obj, "[pdlua] draw_image: out of memory for resized buffer");
+            stbi_image_free(src_pixels);
+            return 0;
+        }
+
+        // stbir_resize_uint8_linear gives a proper box/bilinear filtered result
+        stbir_resize_uint8_linear(src_pixels, src_w, src_h, 0,
+                                   dst_pixels, dst_w, dst_h, 0, STBIR_RGBA);
+        stbi_image_free(src_pixels);
+    }
+
+    // Encode to PNG → Base64 → Tk photo image (same path as draw_svg)
+    int png_size;
+    unsigned char *png_buf = stbi_write_png_to_mem(dst_pixels, dst_w * 4,
+                                                    dst_w, dst_h, 4, &png_size);
+    if (dst_pixels != src_pixels)
+        freebytes(dst_pixels, dst_w * dst_h * 4);
+    else
+        stbi_image_free(src_pixels);
+
+    if (!png_buf || png_size <= 0) {
+        pd_error(obj, "[pdlua] draw_image: PNG encode failed");
+        return 0;
+    }
+
+    char *encoded = pdlua_base64_encode(png_buf, (size_t)png_size);
+    free(png_buf);
+
+    if (!encoded) {
+        pd_error(obj, "[pdlua] draw_image: base64 encode failed");
+        return 0;
+    }
+
+    pdgui_vmess(0, "rrr s rs",  "image", "create", "photo", image_name, "-data", encoded);
+    pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y,
+                "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
+    free(encoded);
+
+    // Cache the scaled hash
+    if (gfx->num_images == 0)
+        gfx->images = getbytes(sizeof(uint64_t));
+    else
+        gfx->images = resizebytes(gfx->images,
+                                   gfx->num_images * sizeof(uint64_t),
+                                   (gfx->num_images + 1) * sizeof(uint64_t));
+    gfx->images[gfx->num_images++] = image_hash;
+
+#else
+    // TODO: purr-data
 #endif
     return 0;
 }
