@@ -626,7 +626,7 @@ static int pdlua_properties_addcolor(lua_State *L) {
 
         pdgui_vmess(0, "ss", "frame", container);
         pdgui_vmess(0, "ssss", "label", textid, "-text", text);
-        pdgui_vmess(0, "ssssssssss", "label", colorboxid, "-text", "", "-width", "4", "-height", "2", "-background", initcolor, "-relief", "sunken", "-borderwidth", "1");
+        pdgui_vmess(0, "sssssisisssssi", "label", colorboxid, "-text", "", "-width", 4, "-height", 2, "-background", initcolor, "-relief", "sunken", "-borderwidth", 1);
         pdgui_vmess(0, "ssss", colorboxid, "configure", "-cursor", "hand2");
 
         pdgui_vmess(0, "r",
@@ -647,7 +647,7 @@ static int pdlua_properties_addcolor(lua_State *L) {
         pdgui_vmess(0, "ssss", "bind", colorboxid, "<Button-1>", pdsend);
 
         pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0, "ssssss", "pack", colorboxid, "-side", "top", "-pady", "2");
+        pdgui_vmess(0, "sssssi", "pack", colorboxid, "-side", "top", "-pady", 2);
 
         pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "w");
 
