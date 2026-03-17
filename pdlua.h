@@ -25,6 +25,15 @@ typedef struct _gfx_transform
     float x, y;
 } gfx_transform;
 
+#define MAX_PENDING_PROPERTIES 128
+#define MAX_PROPERTY_ARGS 8
+
+typedef struct {
+    char guitype[MAXPDSTRING];
+    char method[MAXPDSTRING];
+    int  argc;
+    t_atom argv[MAX_PROPERTY_ARGS];
+} t_pending_property;
 
 typedef struct _pdlua_properties
 {
@@ -36,6 +45,9 @@ typedef struct _pdlua_properties
     int property_count;
     int max_col, max_row;
     int current_col, current_row;
+
+    t_pending_property pending[MAX_PENDING_PROPERTIES];
+    int pending_count;
 #else
    int property_count;
    int max_properties;

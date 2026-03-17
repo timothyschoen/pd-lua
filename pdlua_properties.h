@@ -151,10 +151,8 @@ cleanup:
     va_end(defaults);
 }
 
-static void pdlua_properties(t_gobj *z, t_glist *owner)
+static void pdlua_properties(t_gobj *z, t_glist * UNUSED(owner))
 {
-    UNUSED(owner);
-
     t_pdlua *pdlua = (t_pdlua *)z;
     lua_State *L = __L();
 
@@ -217,7 +215,75 @@ static int pdlua_properties_addcombo(lua_State *L)
     return 0;
 }
 
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol * UNUSED(s), int argc, t_atom *argv)
+{
+    if (argc < 2)
+        return;
 
+    lua_getglobal(__L(), "pd");
+    lua_getfield(__L(), -1, "_set_properties");
+    lua_remove(__L(), -2);
+
+    lua_pushlightuserdata(__L(), o);
+    lua_pushstring(__L(), atom_getsymbol(argv + 1)->s_name);
+    lua_newtable(__L());
+
+    const char *guitype = atom_getsymbol(argv)->s_name;
+    if (strcmp(guitype, "colorpicker") == 0)
+    {
+        const char *hexcolor = atom_getsymbol(argv + 2)->s_name;
+        int isvalid = 1;
+
+        if (hexcolor == NULL || hexcolor[0] != '#' || strlen(hexcolor) != 7) {
+            isvalid = 0;
+        } else {
+            for (int i = 1; i < 7; i++) {
+                if (!isxdigit(hexcolor[i])) isvalid = 0;
+            }
+        }
+
+        if (!isvalid) {
+            pd_error(o, "Invalid color string");
+            return;
+        }
+
+        int r, g, b;
+        if (sscanf(hexcolor + 1, "%2x%2x%2x", &r, &g, &b) == 3) {
+            lua_newtable(__L());
+            lua_pushinteger(__L(), r);
+            lua_rawseti(__L(), -2, 1);
+            lua_pushinteger(__L(), g);
+            lua_rawseti(__L(), -2, 2);
+            lua_pushinteger(__L(), b);
+            lua_rawseti(__L(), -2, 3);
+            lua_rawseti(__L(), -2, 1);
+        } else {
+            pd_error(o, "Invalid color format in sscanf");
+            return;
+        }
+    } else {
+        for (int i = 2; i < argc; i++)
+        {
+            if (argv[i].a_type == A_FLOAT)
+            {
+                lua_pushnumber(__L(), atom_getfloat(argv + i));
+                lua_rawseti(__L(), -2, i - 1); // Store at index (1-based in Lua)
+            }
+            else if (argv[i].a_type == A_SYMBOL)
+            {
+                lua_pushstring(__L(), atom_getsymbol(argv + i)->s_name);
+                lua_rawseti(__L(), -2, i - 1);
+            }
+        }
+    }
+
+    if (lua_pcall(__L(), 3, 0, 0))
+    {
+        mylua_error(__L(), o, "_set_properties"); // Handle error
+        lua_pop(__L(), 1); // Pop error message
+        return;
+    }
+}
 #else
 
 #ifdef PURR_DATA
@@ -266,11 +332,12 @@ static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
     if(pdlua->properties.frame_count != 0)
         pd_unbind(&pdlua->pd.ob_pd, p->properties_receiver);
 
-    pdlua->properties.current_frame = NULL;
-    pdlua->properties.frame_count = 0;
-    pdlua->properties.property_count = 0;
-    pdlua->properties.current_row = 0;
-    pdlua->properties.current_col = 0;
+    p->current_frame = NULL;
+    p->frame_count = 0;
+    p->property_count = 0;
+    p->current_row = 0;
+    p->current_col = 0;
+    p->pending_count = 0;
 
     pd_bind(&pdlua->pd.ob_pd, p->properties_receiver);
 
@@ -338,24 +405,31 @@ static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
     pdgui_vmess(0, "sssf", "frame", buttonsId, "-pady", 5.0f);
     pdgui_vmess(0, "ssss", "pack", buttonsId, "-fill", "x");
 
-    // Cancel (Close window)
-    pdgui_vmess(0, "ssssss", "button", buttonCancelId, "-text", "Cancel", "-command",
-                destroyCommand);
-    pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId, "-side", "left", "-expand", 1, "-padx", 10,
-                "-ipadx", 10);
 
-    // Apply (send all data to pd and lua obj) for this must be necessary to save all the variables used in the object in a char [128][MAXPDSTRING],
-    // I don't think that this is good, or there is better solution?
-    // TODO: Need to dev the apply command
-    pdgui_vmess(0, "ssss", "button", buttonApplyId, "-text", "Apply");
-    // pdgui_vmess(0, "ssssss", "button", buttonApplyId, "-text", "Apply", "-command", command);
-    pdgui_vmess(0, "sssssisisi", "pack", buttonApplyId, "-side", "left", "-expand", 1, "-padx", 10,
-                "-ipadx", 10);
+    char applyCommand[MAXPDSTRING];
+    snprintf(applyCommand, MAXPDSTRING,
+        "pdsend \"%s _properties apply\"",
+        p->properties_receiver->s_name);
 
-    // Ok
-    pdgui_vmess(0, "ssssss", "button", buttonOkId, "-text", "OK", "-command", destroyCommand);
-    pdgui_vmess(0, "sssssisisi", "pack", buttonOkId, "-side", "left", "-expand", 1, "-padx", 10,
-                "-ipadx", 10);
+    char okCommand[MAXPDSTRING * 2];
+    snprintf(okCommand, MAXPDSTRING * 2,
+        "pdsend \"%s _properties apply\"; destroy .%p",
+        p->properties_receiver->s_name, (void *)p);
+
+    pdgui_vmess(0, "ssssss", "button", buttonCancelId,
+        "-text", "Cancel", "-command", destroyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId,
+        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
+
+    pdgui_vmess(0, "ssssss", "button", buttonApplyId,
+        "-text", "Apply", "-command", applyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonApplyId,
+        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
+
+    pdgui_vmess(0, "ssssss", "button", buttonOkId,
+        "-text", "OK", "-command", okCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonOkId,
+        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
 #else
 
     t_symbol *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, x);
@@ -510,7 +584,7 @@ static int pdlua_properties_addtext(lua_State *L)
 
     snprintf(entryid, MAXPDSTRING, "%s.textbox%d", text_button_frame, pdlua->properties.property_count);
     pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", 8);
-    pdgui_vmess(0, "ssss", "bind", entryid, "<Return>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", entryid, "<KeyRelease>", pdsend);
     pdgui_vmess(0, "ssss", "bind", entryid, "<FocusOut>", pdsend);
 
     // Pack the entry
@@ -666,7 +740,7 @@ static int pdlua_properties_addint(lua_State *L)
                 "-validatecommand", "string is integer %P",
                 "-command", pdsend);
 
-    pdgui_vmess(0, "ssss", "bind", spinboxid, "<Return>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", spinboxid, "<KeyRelease>", pdsend);
     pdgui_vmess(0, "ssss", "bind", spinboxid, "<FocusOut>", pdsend);
 
     pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
@@ -731,9 +805,9 @@ static int pdlua_properties_addfloat(lua_State *L)
                 "-validatecommand", "regexp {^-?[0-9]*\\.?[0-9]*$} %P");
 
 
-    char returncmd[MAXPDSTRING * 4];
-    snprintf(returncmd, sizeof(returncmd),
-        "bind %s <Return> {"
+    char keypresscmd[MAXPDSTRING * 4];
+    snprintf(keypresscmd, sizeof(keypresscmd),
+        "bind %s <KeyRelease> {"
         "  set v $%s;"
         "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
         "  pdsend \"%s _properties floatbox %s $%s\""
@@ -743,7 +817,7 @@ static int pdlua_properties_addfloat(lua_State *L)
         min, numvariable, min,
         max, numvariable, max,
         pdlua->properties.properties_receiver->s_name, method, numvariable);
-    pdgui_vmess(0, "r", returncmd);
+    pdgui_vmess(0, "r", keypresscmd);
 
     char focusoutcmd[MAXPDSTRING * 4];
     snprintf(focusoutcmd, sizeof(focusoutcmd),
@@ -843,74 +917,108 @@ static int pdlua_properties_addcombo(lua_State *L)
 
     return 0;
 }
-#endif
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol * UNUSED(s), int argc, t_atom *argv)
+static void pdlua_properties_apply(t_pdlua *o)
 {
-    if (argc < 2)
-        return;
+    lua_State *L = __L();
+    t_pdlua_properties *p = &o->properties;
 
-    lua_getglobal(__L(), "pd");
-    lua_getfield(__L(), -1, "_set_properties");
-    lua_remove(__L(), -2);
+    for (int i = 0; i < p->pending_count; i++)
+    {
+        t_pending_property *entry = &p->pending[i];
 
-    lua_pushlightuserdata(__L(), o);
-    lua_pushstring(__L(), atom_getsymbol(argv + 1)->s_name);
-    lua_newtable(__L()); // Criando a tabela
+        lua_getglobal(L, "pd");
+        lua_getfield(L, -1, "_set_properties");
+        lua_remove(L, -2);
+
+        lua_pushlightuserdata(L, o);
+        lua_pushstring(L, entry->method);
+        lua_newtable(L);
+
+        if (strcmp(entry->guitype, "colorpicker") == 0)
+        {
+            const char *hexcolor = atom_getsymbol(&entry->argv[0])->s_name;
+            int r, g, b;
+            if (sscanf(hexcolor + 1, "%2x%2x%2x", &r, &g, &b) == 3)
+            {
+                lua_newtable(L);
+                lua_pushinteger(L, r); lua_rawseti(L, -2, 1);
+                lua_pushinteger(L, g); lua_rawseti(L, -2, 2);
+                lua_pushinteger(L, b); lua_rawseti(L, -2, 3);
+                lua_rawseti(L, -2, 1);
+            }
+        }
+        else
+        {
+            for (int j = 0; j < entry->argc; j++)
+            {
+                if (entry->argv[j].a_type == A_FLOAT)
+                    lua_pushnumber(L, atom_getfloat(&entry->argv[j]));
+                else
+                    lua_pushstring(L, atom_getsymbol(&entry->argv[j])->s_name);
+                lua_rawseti(L, -2, j + 1);
+            }
+        }
+
+        if (lua_pcall(L, 3, 0, 0))
+        {
+            mylua_error(L, o, "_set_properties");
+            lua_pop(L, 1);
+        }
+    }
+
+    p->pending_count = 0;
+}
+
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol *UNUSED(s), int argc, t_atom *argv)
+{
+    if (argc < 1) return;
 
     const char *guitype = atom_getsymbol(argv)->s_name;
-    if (strcmp(guitype, "colorpicker") == 0)
+
+    // Apply button sends this
+    if (strcmp(guitype, "apply") == 0)
     {
-        const char *hexcolor = atom_getsymbol(argv + 2)->s_name;
-        int isvalid = 1;
-
-        if (hexcolor == NULL || hexcolor[0] != '#' || strlen(hexcolor) != 7) {
-            isvalid = 0;
-        } else {
-            for (int i = 1; i < 7; i++) {
-                if (!isxdigit(hexcolor[i])) isvalid = 0;
-            }
-        }
-
-        if (!isvalid) {
-            pd_error(o, "Invalid color string");
-            return;
-        }
-
-        int r, g, b;
-        if (sscanf(hexcolor + 1, "%2x%2x%2x", &r, &g, &b) == 3) {
-            lua_newtable(__L());
-            lua_pushinteger(__L(), r);
-            lua_rawseti(__L(), -2, 1);
-            lua_pushinteger(__L(), g);
-            lua_rawseti(__L(), -2, 2);
-            lua_pushinteger(__L(), b);
-            lua_rawseti(__L(), -2, 3);
-            lua_rawseti(__L(), -2, 1);
-        } else {
-            pd_error(o, "Invalid color format in sscanf");
-            return;
-        }
-    } else {
-        for (int i = 2; i < argc; i++)
-        {
-            if (argv[i].a_type == A_FLOAT)
-            {
-                lua_pushnumber(__L(), atom_getfloat(argv + i));
-                lua_rawseti(__L(), -2, i - 1); // Store at index (1-based in Lua)
-            }
-            else if (argv[i].a_type == A_SYMBOL)
-            {
-                lua_pushstring(__L(), atom_getsymbol(argv + i)->s_name);
-                lua_rawseti(__L(), -2, i - 1);
-            }
-        }
-    }
-
-    if (lua_pcall(__L(), 3, 0, 0))
-    {
-        mylua_error(__L(), o, "_set_properties"); // Handle error
-        lua_pop(__L(), 1); // Pop error message
+        pdlua_properties_apply(o);
         return;
     }
+
+    if (argc < 2) return;
+
+    t_pdlua_properties *p = &o->properties;
+    const char *method = atom_getsymbol(argv + 1)->s_name;
+
+    // Overwrite existing entry for the same method so only the latest value is kept
+    t_pending_property *entry = NULL;
+    for (int i = 0; i < p->pending_count; i++)
+    {
+        if (strcmp(p->pending[i].method, method) == 0)
+        {
+            entry = &p->pending[i];
+            break;
+        }
+    }
+
+    if (!entry)
+    {
+        if (p->pending_count >= MAX_PENDING_PROPERTIES)
+        {
+            pd_error(o, "[pdlua] too many pending properties");
+            return;
+        }
+        entry = &p->pending[p->pending_count++];
+    }
+
+    snprintf(entry->guitype, MAXPDSTRING, "%s", guitype);
+    snprintf(entry->method,  MAXPDSTRING, "%s", method);
+    entry->argc = 0;
+
+    for (int i = 2; i < argc && (i - 2) < MAX_PROPERTY_ARGS; i++)
+    {
+        entry->argv[entry->argc++] = argv[i];
+    }
 }
+
+#endif
+
+
