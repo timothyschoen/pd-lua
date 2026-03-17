@@ -190,7 +190,7 @@ static int pdlua_properties_addint(lua_State *L)
         SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
         SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
 
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_number_property"), 5, atoms);
+        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_int_property"), 5, atoms);
     }
     else
     {
@@ -216,7 +216,7 @@ static int pdlua_properties_addfloat(lua_State *L)
         SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
         SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
 
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_number_property"), 5, atoms);
+        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_float_property"), 5, atoms);
     }
     else
     {
