@@ -29,7 +29,7 @@ static int pdlua_properties_addint(lua_State *L);
 static int pdlua_properties_addfloat(lua_State *L);
 static int pdlua_properties_addcombo(lua_State *L);
 
-static int pdlua_properties_setup(lua_State* L)
+static void pdlua_properties_setup(lua_State* L)
 {
     static const luaL_Reg properties_methods[] = {
         {"new_frame", pdlua_properties_newframe},
@@ -50,8 +50,111 @@ static int pdlua_properties_setup(lua_State* L)
 
 #ifdef PLUGDATA
 
+static inline void plugdata_add_property(lua_State* L, const char* sym, const char *fmt, ...)
+{
+    if (!lua_isuserdata(L, 1))
+        return;
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+
+    int fmtlen = strlen(fmt);
+    int argc = 0;
+    for (int i = 0; i < fmtlen; i++)
+        argc += (fmt[i] == 't' && lua_istable(L, i + 2)) ? lua_rawlen(L, i + 2) : 1;
+
+    t_atom *atoms = alloca(sizeof(t_atom) * argc);
+    int atom_idx = 0;
+
+    va_list defaults;
+    va_start(defaults, fmt);
+
+    for (int i = 0; i < fmtlen; i++)
+    {
+        int lua_idx = i + 2;
+        switch (fmt[i])
+        {
+            case 'f': {
+                SETFLOAT (&atoms[atom_idx], (t_float)luaL_checknumber(L, lua_idx));
+                atom_idx++;
+                break;
+            }
+            case 's': {
+                SETSYMBOL(&atoms[atom_idx], gensym(luaL_checkstring(L, lua_idx)));
+                atom_idx++;
+                break;
+            }
+            case 'F': {
+                SETFLOAT (&atoms[atom_idx], (t_float)luaL_optnumber(L, lua_idx, va_arg(defaults, double)));
+                atom_idx++;
+                break;
+            }
+            case 'S': {
+                SETSYMBOL(&atoms[atom_idx], gensym(luaL_optstring(L, lua_idx, va_arg(defaults, const char*))));
+                atom_idx++;
+                break;
+            }
+            case 'c':
+            {
+                char color[16];
+                if (lua_isstring(L, lua_idx))
+                {
+                    snprintf(color, sizeof(color), "%s", luaL_checkstring(L, lua_idx));
+                }
+                else if (lua_istable(L, lua_idx))
+                {
+                    lua_rawgeti(L, lua_idx, 1);
+                    lua_rawgeti(L, lua_idx, 2);
+                    lua_rawgeti(L, lua_idx, 3);
+                    double r = luaL_checknumber(L, -3);
+                    double g = luaL_checknumber(L, -2);
+                    double b = luaL_checknumber(L, -1);
+                    lua_pop(L, 3);
+                    if (r <= 1.0 && g <= 1.0 && b <= 1.0) { r *= 255.0; g *= 255.0; b *= 255.0; }
+                    int ri = (int)fmax(0, fmin(255, r));
+                    int gi = (int)fmax(0, fmin(255, g));
+                    int bi = (int)fmax(0, fmin(255, b));
+                    snprintf(color, sizeof(color), "#%02x%02x%02x", ri, gi, bi);
+                }
+                else
+                {
+                    pd_error(NULL, "[pdlua] %s: expected color string or {r,g,b} table", sym);
+                    goto cleanup;
+                }
+                SETSYMBOL(&atoms[atom_idx], gensym(color));
+                atom_idx++;
+                break;
+            }
+            case 't':
+            {
+                if (!lua_istable(L, lua_idx))
+                {
+                    pd_error(NULL, "[pdlua] %s: expected table at arg %d", sym, i + 1);
+                    goto cleanup;
+                }
+                int n = lua_rawlen(L, lua_idx);
+                for (int j = 0; j < n; j++)
+                {
+                    lua_rawgeti(L, lua_idx, j + 1);
+                    SETSYMBOL(&atoms[atom_idx], gensym(lua_isstring(L, -1) ? lua_tostring(L, -1) : ""));
+                    atom_idx++;
+                    lua_pop(L, 1);
+                }
+                break;
+            }
+            default: break;
+        }
+    }
+
+    if (pdlua->properties.plugdata_properties_callback)
+        pdlua->properties.plugdata_properties_callback(pdlua, gensym(sym), atom_idx, atoms);
+
+cleanup:
+    va_end(defaults);
+}
+
 static void pdlua_properties(t_gobj *z, t_glist *owner)
 {
+    UNUSED(owner);
+
     t_pdlua *pdlua = (t_pdlua *)z;
     lua_State *L = __L();
 
@@ -74,193 +177,43 @@ static void pdlua_properties(t_gobj *z, t_glist *owner)
 
 static int pdlua_properties_newframe(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        const char *title = lua_tostring(L, 2);
-        int col = lua_tonumber(L, 3);
-
-        t_atom atoms[1];
-        SETSYMBOL(&atoms[0], gensym(title));
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_frame_property"), 1, atoms);
-    } else {
-        pd_error(NULL, "[pdlua] new_frame: invalid args");
-    }
+    plugdata_add_property(L, "add_frame_property", "sf");
     return 0;
 }
 
 static int pdlua_properties_addcheck(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-
-        t_atom atoms[3];
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        SETFLOAT (&atoms[2], (t_float)lua_tonumber(L, 4));
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_check_property"), 3, atoms);
-    } else {
-        pd_error(NULL, "[pdlua] add_check: invalid args");
-    }
+    plugdata_add_property(L, "add_check_property", "ssf");
     return 0;
 }
 
 static int pdlua_properties_addtext(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-
-        t_atom atoms[3];
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        SETSYMBOL(&atoms[2], gensym(lua_tostring(L, 4)));
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_text_property"), 3, atoms);
-    } else {
-        pd_error(NULL, "[pdlua] add_text: invalid args");
-    }
+    plugdata_add_property(L, "add_text_property", "sss");
     return 0;
 }
 
 static int pdlua_properties_addcolor(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && (lua_isstring(L, 4) || lua_istable(L, 4) ))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-
-        t_atom atoms[3];
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-
-        char initcolor[16];
-        if (lua_isstring(L, 4)) {
-            const char *init = lua_tostring(L, 4);
-            snprintf(initcolor, sizeof(initcolor), "%s", init);
-        }
-        else if (lua_istable(L, 4)) {
-            lua_rawgeti(L, 4, 1);
-            lua_rawgeti(L, 4, 2);
-            lua_rawgeti(L, 4, 3);
-
-            double r = luaL_checknumber(L, -3);
-            double g = luaL_checknumber(L, -2);
-            double b = luaL_checknumber(L, -1);
-
-            lua_pop(L, 3);
-
-            if (r <= 1.0 && g <= 1.0 && b <= 1.0) {
-                r *= 255.0;
-                g *= 255.0;
-                b *= 255.0;
-            }
-
-            int ri = (int)(r < 0 ? 0 : (r > 255 ? 255 : r));
-            int gi = (int)(g < 0 ? 0 : (g > 255 ? 255 : g));
-            int bi = (int)(b < 0 ? 0 : (b > 255 ? 255 : b));
-
-            snprintf(initcolor, sizeof(initcolor), "#%02x%02x%02x", ri, gi, bi);
-        }
-        else {
-            pd_error(NULL, "[pdlua] add_color: invalid init value");
-            return 0;
-        }
-        SETSYMBOL(&atoms[2], gensym(initcolor));
-
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_color_property"), 3, atoms);
-    } else {
-        pd_error(NULL, "[pdlua] add_color: invalid args");
-    }
+    plugdata_add_property(L, "add_color_property", "ssc");
     return 0;
 }
 
 static int pdlua_properties_addint(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) &&
-        lua_isstring(L, 2) &&
-        lua_isstring(L, 3) &&
-        lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        t_atom atoms[5];
-
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        SETFLOAT(&atoms[2], lua_tonumber(L, 4));
-        SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
-        SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
-
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_int_property"), 5, atoms);
-    }
-    else
-    {
-        pd_error(NULL, "[pdlua] add_int: invalid args");
-    }
-
+    plugdata_add_property(L, "add_int_property", "ssfFF", -1e36, 1e36);
     return 0;
 }
 
 static int pdlua_properties_addfloat(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) &&
-        lua_isstring(L, 2) &&
-        lua_isstring(L, 3) &&
-        lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        t_atom atoms[5];
-
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        SETFLOAT(&atoms[2], lua_tonumber(L, 4));
-        SETFLOAT(&atoms[3], luaL_optnumber(L, 5, -1e36));
-        SETFLOAT(&atoms[4], luaL_optnumber(L, 6, 1e36));
-
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_float_property"), 5, atoms);
-    }
-    else
-    {
-        pd_error(NULL, "[pdlua] add_number: invalid args");
-    }
-
+    plugdata_add_property(L, "add_float_property", "ssfFF", -1e36, 1e36);
     return 0;
 }
 
 static int pdlua_properties_addcombo(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) &&
-        lua_isstring(L, 2) &&
-        lua_isstring(L, 3) &&
-        lua_isnumber(L, 4) &&
-        lua_istable(L, 5))
-    {
-        int num_options = lua_rawlen(L, 5);
-        int argc = 3 + num_options;
-        t_atom *atoms = (t_atom *)getbytes(sizeof(t_atom) * argc);
-
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
-        SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        SETFLOAT(&atoms[2], lua_tonumber(L, 4));
-
-        for (int i = 0; i < num_options; i++)
-        {
-            lua_rawgeti(L, 5, i + 1);
-            if (lua_isstring(L, -1))
-                SETSYMBOL(&atoms[3 + i], gensym(lua_tostring(L, -1)));
-            else
-                SETSYMBOL(&atoms[3 + i], gensym(""));
-            lua_pop(L, 1);
-        }
-
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_combo_property"), argc, atoms);
-        freebytes(atoms, sizeof(t_atom) * argc);
-    }
-    else
-    {
-        pd_error(NULL, "[pdlua] add_combo: invalid args");
-    }
-
+    plugdata_add_property(L, "add_combo_property", "ssft");
     return 0;
 }
 
@@ -268,7 +221,7 @@ static int pdlua_properties_addcombo(lua_State *L)
 #else
 
 #ifdef PURR_DATA
-void pdlua_add_property(t_pdlua_properties *p, const char *name, const char *type, const char *value, const char* callback) {
+void purrdata_add_property(t_pdlua_properties *p, const char *name, const char *type, const char *value, const char* callback) {
     if(p->property_count >= p->max_properties) {
         // Reallocate arrays
         int new_size = p->max_properties + 8;
@@ -296,7 +249,8 @@ static void pdlua_properties_updaterow(t_pdlua_properties *p)
     }
 }
 
-static void pdlua_properties(t_gobj *z, t_glist *owner) {
+static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
+
     t_pdlua *pdlua = (t_pdlua *)z;
     t_pdlua_properties *p = &pdlua->properties;
 
@@ -431,431 +385,391 @@ static void pdlua_properties_buildvar(t_pdlua *pdlua, char *out)
 
 static int pdlua_properties_newframe(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isnumber(L, 3))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        const char *title = lua_tostring(L, 2);
-        int col = lua_tonumber(L, 3);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    const char *title = luaL_checkstring(L, 2);
+    int col = luaL_checknumber(L, 3);
 
 #ifndef PURR_DATA
-        pdlua->properties.frame_count++;
-        char current_frameid[MAXPDSTRING];
-        snprintf(current_frameid, MAXPDSTRING, ".%p.main.frame%d", (void *)&pdlua->properties, pdlua->properties.frame_count);
-        pdlua->properties.current_frame = gensym(current_frameid);
+    pdlua->properties.frame_count++;
+    char current_frameid[MAXPDSTRING];
+    snprintf(current_frameid, MAXPDSTRING, ".%p.main.frame%d", (void *)&pdlua->properties, pdlua->properties.frame_count);
+    pdlua->properties.current_frame = gensym(current_frameid);
 
-        // raised, sunken, flat, ridge, solid, and groove.
-        // Create main frame for set of configurations
-        pdgui_vmess(0, "sssssi", "frame", current_frameid, "-relief", "groove", "-borderwidth", 1);
-        pdgui_vmess(0, "sssssssisi", "pack", current_frameid, "-side", "top", "-fill", "x", "-padx", 10,
-                    "-pady", 10);
+    // raised, sunken, flat, ridge, solid, and groove.
+    // Create main frame for set of configurations
+    pdgui_vmess(0, "sssssi", "frame", current_frameid, "-relief", "groove", "-borderwidth", 1);
+    pdgui_vmess(0, "sssssssisi", "pack", current_frameid, "-side", "top", "-fill", "x", "-padx", 10,
+                "-pady", 10);
 
-        // Title of the Frame
-        char labelid[MAXPDSTRING];
-        snprintf(labelid, MAXPDSTRING, "%s.title", current_frameid);
-        pdgui_vmess(0, "ssss", "label", labelid, "-text", title);
-        pdgui_vmess(0, "sssssf", "pack", labelid, "-side", "top", "-pady", 5.f);
+    // Title of the Frame
+    char labelid[MAXPDSTRING];
+    snprintf(labelid, MAXPDSTRING, "%s.title", current_frameid);
+    pdgui_vmess(0, "ssss", "label", labelid, "-text", title);
+    pdgui_vmess(0, "sssssf", "pack", labelid, "-side", "top", "-pady", 5.f);
 
-        // Create content frame with grid layout
-        char content_frameid[MAXPDSTRING];
-        snprintf(content_frameid, MAXPDSTRING, "%s.content", current_frameid);
-        pdgui_vmess(0, "ss", "frame", content_frameid);
-        pdgui_vmess(0, "ssss", "pack", content_frameid, "-side", "top", "-fill", "x");
+    // Create content frame with grid layout
+    char content_frameid[MAXPDSTRING];
+    snprintf(content_frameid, MAXPDSTRING, "%s.content", current_frameid);
+    pdgui_vmess(0, "ss", "frame", content_frameid);
+    pdgui_vmess(0, "ssss", "pack", content_frameid, "-side", "top", "-fill", "x");
 
-        // Configure grid with 2 equal columns
-        for (int i = 0; i < col; i++) {
-            pdgui_vmess(0, "sssisi", "grid", "columnconfigure", content_frameid, i, "-weight", 1);
-        }
-        pdlua->properties.current_frame = gensym(content_frameid);
-        pdlua->properties.max_col = col;
-        pdlua->properties.current_col = 0;
-        pdlua->properties.current_row = 0;
-#else
-        // TODO: purr-data implementation
-#endif
-    } else{
-        pd_error(NULL, "[pdlua] new_frame: invalid args");
-
+    // Configure grid with 2 equal columns
+    for (int i = 0; i < col; i++) {
+        pdgui_vmess(0, "sssisi", "grid", "columnconfigure", content_frameid, i, "-weight", 1);
     }
+    pdlua->properties.current_frame = gensym(content_frameid);
+    pdlua->properties.max_col = col;
+    pdlua->properties.current_col = 0;
+    pdlua->properties.current_row = 0;
+#else
+    // TODO: purr-data implementation
+#endif
     return 0;
 }
 
 static int pdlua_properties_addcheck(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        const char *text = lua_tostring(L, 2);
-        const char *method = lua_tostring(L, 3);
-        int init_value = lua_tonumber(L, 4);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    const char *text = luaL_checkstring(L, 2);
+    const char *method = luaL_checkstring(L, 3);
+    int init_value = luaL_checknumber(L, 4);
 
 #ifndef PURR_DATA
-        if(!pdlua->properties.current_frame)
-        {
-            pd_error(NULL, "[pdlua] add_check: no active frame");
-            return 0;
-        }
-
-        char pdsend[MAXPDSTRING];
-        char checkid[MAXPDSTRING];
-        char checkvariable[MAXPDSTRING];
-
-        pdlua_properties_buildvar(pdlua, checkvariable);
-
-        // Initialize the Tcl variable to 0 (unchecked)
-        pdgui_vmess(0, "ssi", "set", checkvariable, init_value);
-
-        // Build the pdsend command
-        snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties checkbox %s $%s]",
-                 pdlua->properties.properties_receiver->s_name, method, checkvariable);
-
-        // Create the checkbox
-        snprintf(checkid, MAXPDSTRING, "%s.check%d", pdlua->properties.current_frame->s_name, pdlua->properties.property_count);
-        pdgui_vmess(0, "ssssssss", "checkbutton", checkid, "-text", text, "-variable", checkvariable,
-                    "-command", pdsend);
-
-        pdgui_vmess(0, "sssisi", "grid", checkid, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col,
-                    "-sticky", "we");
-        pdlua_properties_updaterow(&pdlua->properties);
-#else
-        pdlua_add_property(text, "toggle", init_value ? "1" : "0", method);
-#endif
-    } else {
-        pd_error(NULL, "[pdlua] add_check: invalid args");
+    if(!pdlua->properties.current_frame)
+    {
+        pd_error(NULL, "[pdlua] add_check: no active frame");
+        return 0;
     }
+
+    char pdsend[MAXPDSTRING];
+    char checkid[MAXPDSTRING];
+    char checkvariable[MAXPDSTRING];
+
+    pdlua_properties_buildvar(pdlua, checkvariable);
+
+    // Initialize the Tcl variable to 0 (unchecked)
+    pdgui_vmess(0, "ssi", "set", checkvariable, init_value);
+
+    // Build the pdsend command
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties checkbox %s $%s]",
+             pdlua->properties.properties_receiver->s_name, method, checkvariable);
+
+    // Create the checkbox
+    snprintf(checkid, MAXPDSTRING, "%s.check%d", pdlua->properties.current_frame->s_name, pdlua->properties.property_count);
+    pdgui_vmess(0, "ssssssss", "checkbutton", checkid, "-text", text, "-variable", checkvariable,
+                "-command", pdsend);
+
+    pdgui_vmess(0, "sssisi", "grid", checkid, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col,
+                "-sticky", "we");
+    pdlua_properties_updaterow(&pdlua->properties);
+#else
+    purrdata_add_property(text, "toggle", init_value ? "1" : "0", method);
+#endif
     return 0;
 }
 
 
 static int pdlua_properties_addtext(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        const char *text = lua_tostring(L, 2);
-        const char *method = lua_tostring(L, 3);
-        const char *init_value = lua_tostring(L, 4);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    const char *text = luaL_checkstring(L, 2);
+    const char *method = luaL_checkstring(L, 3);
+    const char *init_value = luaL_checkstring(L, 4);
 
 #ifndef PURR_DATA
-        if(!pdlua->properties.current_frame)
-        {
-            pd_error(NULL, "[pdlua] add_text: no active frame");
-            return 0;
-        }
-
-        char pdsend[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char entryid[MAXPDSTRING];
-
-        char textvariable[MAXPDSTRING];
-
-        pdlua_properties_buildvar(pdlua, textvariable);
-
-        pdgui_vmess(0, "sss", "set", textvariable, init_value);
-
-        // Command to send it to pd
-        snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties textbox %s $%s]",
-                 pdlua->properties.properties_receiver->s_name, method, textvariable);
-
-        // container for button to set and text input
-        char text_button_frame[MAXPDSTRING];
-        snprintf(text_button_frame, MAXPDSTRING, "%s.text_button_frame_%d", pdlua->properties.current_frame->s_name,
-                 pdlua->properties.property_count);
-        pdgui_vmess(0, "sssssisisi", "frame", text_button_frame, "-relief", "solid", "-borderwidth", 0,
-                    "-padx", 5, "-pady", 5);
-
-        // create text for identification
-        snprintf(textid, MAXPDSTRING, "%s.text%d", text_button_frame, pdlua->properties.property_count);
-        pdgui_vmess(0, "ssss", "label", textid, "-text", text);
-
-        snprintf(entryid, MAXPDSTRING, "%s.textbox%d", text_button_frame, pdlua->properties.property_count);
-        pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", 8);
-        pdgui_vmess(0, "ssss", "bind", entryid, "<Return>", pdsend);
-        pdgui_vmess(0, "ssss", "bind", entryid, "<FocusOut>", pdsend);
-
-        // Pack the entry
-        pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0, "ssss", "pack", entryid, "-side", "left");
-        pdgui_vmess(0, "sssisisssi", "grid", text_button_frame, "-row", pdlua->properties.current_row, "-column",
-                    pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
-        pdlua_properties_updaterow(&pdlua->properties);
-#else
-        pdlua_add_property(text, "symbol", init_value, method);
-#endif
-    } else {
-        pd_error(NULL, "[pdlua] add_text: invalid args");
+    if(!pdlua->properties.current_frame)
+    {
+        pd_error(NULL, "[pdlua] add_text: no active frame");
+        return 0;
     }
+
+    char pdsend[MAXPDSTRING];
+    char textid[MAXPDSTRING];
+    char entryid[MAXPDSTRING];
+
+    char textvariable[MAXPDSTRING];
+
+    pdlua_properties_buildvar(pdlua, textvariable);
+
+    pdgui_vmess(0, "sss", "set", textvariable, init_value);
+
+    // Command to send it to pd
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties textbox %s $%s]",
+             pdlua->properties.properties_receiver->s_name, method, textvariable);
+
+    // container for button to set and text input
+    char text_button_frame[MAXPDSTRING];
+    snprintf(text_button_frame, MAXPDSTRING, "%s.text_button_frame_%d", pdlua->properties.current_frame->s_name,
+             pdlua->properties.property_count);
+    pdgui_vmess(0, "sssssisisi", "frame", text_button_frame, "-relief", "solid", "-borderwidth", 0,
+                "-padx", 5, "-pady", 5);
+
+    // create text for identification
+    snprintf(textid, MAXPDSTRING, "%s.text%d", text_button_frame, pdlua->properties.property_count);
+    pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+
+    snprintf(entryid, MAXPDSTRING, "%s.textbox%d", text_button_frame, pdlua->properties.property_count);
+    pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", 8);
+    pdgui_vmess(0, "ssss", "bind", entryid, "<Return>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", entryid, "<FocusOut>", pdsend);
+
+    // Pack the entry
+    pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+    pdgui_vmess(0, "ssss", "pack", entryid, "-side", "left");
+    pdgui_vmess(0, "sssisisssi", "grid", text_button_frame, "-row", pdlua->properties.current_row, "-column",
+                pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
+    pdlua_properties_updaterow(&pdlua->properties);
+#else
+    purrdata_add_property(text, "symbol", init_value, method);
+#endif
     return 0;
 }
 
 static int pdlua_properties_addcolor(lua_State *L) {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) &&
-        (lua_isstring(L, 4) || lua_istable(L, 4)))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
-        const char *text = lua_tostring(L, 2);
-        const char *method = lua_tostring(L, 3);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    const char *text = luaL_checkstring(L, 2);
+    const char *method = luaL_checkstring(L, 3);
 
-        char initcolor[16];
-        if (lua_isstring(L, 4)) {
-            const char *init = lua_tostring(L, 4);
-            snprintf(initcolor, sizeof(initcolor), "%s", init);
+    char initcolor[16];
+    if (lua_isstring(L, 4)) {
+        const char *init = lua_tostring(L, 4);
+        snprintf(initcolor, sizeof(initcolor), "%s", init);
+    }
+    else if (lua_istable(L, 4)) {
+        lua_rawgeti(L, 4, 1);
+        lua_rawgeti(L, 4, 2);
+        lua_rawgeti(L, 4, 3);
+
+        double r = luaL_checknumber(L, -3);
+        double g = luaL_checknumber(L, -2);
+        double b = luaL_checknumber(L, -1);
+
+        lua_pop(L, 3);
+
+        if (r <= 1.0 && g <= 1.0 && b <= 1.0) {
+            r *= 255.0;
+            g *= 255.0;
+            b *= 255.0;
         }
-        else if (lua_istable(L, 4)) {
-            lua_rawgeti(L, 4, 1);
-            lua_rawgeti(L, 4, 2);
-            lua_rawgeti(L, 4, 3);
 
-            double r = luaL_checknumber(L, -3);
-            double g = luaL_checknumber(L, -2);
-            double b = luaL_checknumber(L, -1);
+        int ri = (int)(r < 0 ? 0 : (r > 255 ? 255 : r));
+        int gi = (int)(g < 0 ? 0 : (g > 255 ? 255 : g));
+        int bi = (int)(b < 0 ? 0 : (b > 255 ? 255 : b));
 
-            lua_pop(L, 3);
-
-            if (r <= 1.0 && g <= 1.0 && b <= 1.0) {
-                r *= 255.0;
-                g *= 255.0;
-                b *= 255.0;
-            }
-
-            int ri = (int)(r < 0 ? 0 : (r > 255 ? 255 : r));
-            int gi = (int)(g < 0 ? 0 : (g > 255 ? 255 : g));
-            int bi = (int)(b < 0 ? 0 : (b > 255 ? 255 : b));
-
-            snprintf(initcolor, sizeof(initcolor), "#%02x%02x%02x", ri, gi, bi);
-        }
-        else {
-            pd_error(NULL, "[pdlua] add_color: invalid init value");
-            return 0;
-        }
+        snprintf(initcolor, sizeof(initcolor), "#%02x%02x%02x", ri, gi, bi);
+    }
+    else {
+        pd_error(NULL, "[pdlua] add_color: invalid init value");
+        return 0;
+    }
 
 #ifndef PURR_DATA
-        if (!pdlua->properties.current_frame) {
-            pd_error(NULL, "[pdlua] add_color: no active frame");
-            return 0;
-        }
+    if (!pdlua->properties.current_frame) {
+        pd_error(NULL, "[pdlua] add_color: no active frame");
+        return 0;
+    }
 
-        char container[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char colorboxid[MAXPDSTRING];
-        char pdsend[MAXPDSTRING];
+    char container[MAXPDSTRING];
+    char textid[MAXPDSTRING];
+    char colorboxid[MAXPDSTRING];
+    char pdsend[MAXPDSTRING];
 
-        snprintf(container, MAXPDSTRING, "%s.color%d",
-                 pdlua->properties.current_frame->s_name,
-                 pdlua->properties.property_count);
-        snprintf(textid, MAXPDSTRING, "%s.label", container);
-        snprintf(colorboxid, MAXPDSTRING, "%s.box", container);
+    snprintf(container, MAXPDSTRING, "%s.color%d",
+             pdlua->properties.current_frame->s_name,
+             pdlua->properties.property_count);
+    snprintf(textid, MAXPDSTRING, "%s.label", container);
+    snprintf(colorboxid, MAXPDSTRING, "%s.box", container);
 
-        pdgui_vmess(0, "ss", "frame", container);
-        pdgui_vmess(0, "ssss", "label", textid, "-text", text);
-        pdgui_vmess(0, "sssssisisssssi", "label", colorboxid, "-text", "", "-width", 4, "-height", 2, "-background", initcolor, "-relief", "sunken", "-borderwidth", 1);
-        pdgui_vmess(0, "ssss", colorboxid, "configure", "-cursor", "hand2");
+    pdgui_vmess(0, "ss", "frame", container);
+    pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+    pdgui_vmess(0, "sssssisisssssi", "label", colorboxid, "-text", "", "-width", 4, "-height", 2, "-background", initcolor, "-relief", "sunken", "-borderwidth", 1);
+    pdgui_vmess(0, "ssss", colorboxid, "configure", "-cursor", "hand2");
 
-        pdgui_vmess(0, "r",
-        "proc pdlua_choose_color {widget receiver method} {\n"
-        "    set current [ $widget cget -background ]\n"
-        "\n"
-        "    set c [tk_chooseColor -initialcolor $current -title \"Choose color\"]\n"
-        "\n"
-        "    if {$c ne \"\"} {\n"
-        "        $widget configure -background $c\n"
-        "\n"
-        "        pdsend [concat $receiver _properties colorpicker $method $c]\n"
-        "    }\n"
-        "}\n");
+    pdgui_vmess(0, "r",
+    "proc pdlua_choose_color {widget receiver method} {\n"
+    "    set current [ $widget cget -background ]\n"
+    "\n"
+    "    set c [tk_chooseColor -initialcolor $current -title \"Choose color\"]\n"
+    "\n"
+    "    if {$c ne \"\"} {\n"
+    "        $widget configure -background $c\n"
+    "\n"
+    "        pdsend [concat $receiver _properties colorpicker $method $c]\n"
+    "    }\n"
+    "}\n");
 
-        snprintf(pdsend, MAXPDSTRING, "pdlua_choose_color %s %s %s", colorboxid, pdlua->properties.properties_receiver->s_name, method);
+    snprintf(pdsend, MAXPDSTRING, "pdlua_choose_color %s %s %s", colorboxid, pdlua->properties.properties_receiver->s_name, method);
 
-        pdgui_vmess(0, "ssss", "bind", colorboxid, "<Button-1>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", colorboxid, "<Button-1>", pdsend);
 
-        pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0, "sssssi", "pack", colorboxid, "-side", "top", "-pady", 2);
+    pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+    pdgui_vmess(0, "sssssi", "pack", colorboxid, "-side", "top", "-pady", 2);
 
-        pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "w");
+    pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "w");
 
-        pdlua_properties_updaterow(&pdlua->properties);
+    pdlua_properties_updaterow(&pdlua->properties);
 
 #else
-        pdlua_add_property(text, "symbol", initcolor, method);
+    purrdata_add_property(text, "symbol", initcolor, method);
 #endif
-    } else {
-        pd_error(NULL, "[pdlua] add_color: invalid args");
-    }
 
     return 0;
 }
 
 static int pdlua_properties_addint(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) &&
-        lua_isstring(L, 2) &&
-        lua_isstring(L, 3) &&
-        lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
-        const char *text = lua_tostring(L, 2);
-        const char *method = lua_tostring(L, 3);
-        int init = (int)lua_tonumber(L, 4);
-        double min = luaL_optnumber(L, 5, -1e36);
-        double max = luaL_optnumber(L, 6, 1e36);
+    const char *text = luaL_checkstring(L, 2);
+    const char *method = luaL_checkstring(L, 3);
+    int init = (int)luaL_checknumber(L, 4);
+    double min = luaL_optnumber(L, 5, -1e36);
+    double max = luaL_optnumber(L, 6, 1e36);
 
 #ifndef PURR_DATA
-        if(!pdlua->properties.current_frame)
-        {
-            pd_error(NULL, "[pdlua] add_int: no active frame");
-            return 0;
-        }
+    if(!pdlua->properties.current_frame)
+    {
+        pd_error(NULL, "[pdlua] add_int: no active frame");
+        return 0;
+    }
 
-        char pdsend[MAXPDSTRING];
-        char spinboxid[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char numvariable[MAXPDSTRING];
-        char container[MAXPDSTRING];
+    char pdsend[MAXPDSTRING];
+    char spinboxid[MAXPDSTRING];
+    char textid[MAXPDSTRING];
+    char numvariable[MAXPDSTRING];
+    char container[MAXPDSTRING];
 
-        pdlua_properties_buildvar(pdlua, numvariable);
+    pdlua_properties_buildvar(pdlua, numvariable);
 
-        pdgui_vmess(0, "ssi", "set", numvariable, init);
+    pdgui_vmess(0, "ssi", "set", numvariable, init);
 
-        snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties numberbox %s $%s]",
-                 pdlua->properties.properties_receiver->s_name, method, numvariable);
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties numberbox %s $%s]",
+             pdlua->properties.properties_receiver->s_name, method, numvariable);
 
-        snprintf(container, MAXPDSTRING, "%s.numberbox%d",
-                 pdlua->properties.current_frame->s_name,
-                 pdlua->properties.property_count);
+    snprintf(container, MAXPDSTRING, "%s.numberbox%d",
+             pdlua->properties.current_frame->s_name,
+             pdlua->properties.property_count);
 
-        pdgui_vmess(0, "ss", "frame", container);
+    pdgui_vmess(0, "ss", "frame", container);
 
-        snprintf(textid, MAXPDSTRING, "%s.label", container);
-        pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+    snprintf(textid, MAXPDSTRING, "%s.label", container);
+    pdgui_vmess(0, "ssss", "label", textid, "-text", text);
 
-        snprintf(spinboxid, MAXPDSTRING, "%s.spin", container);
+    snprintf(spinboxid, MAXPDSTRING, "%s.spin", container);
 
-        pdgui_vmess(0, "sssfsfsfsssissssss", "ttk::spinbox", spinboxid,
-                    "-from", min, "-to", max,
-                    "-increment", 1.0f,
-                    "-textvariable", numvariable,
-                    "-width", 8,
-                    "-validate", "key",
-                    "-validatecommand", "string is integer %P",
-                    "-command", pdsend);
+    pdgui_vmess(0, "sssfsfsfsssissssss", "ttk::spinbox", spinboxid,
+                "-from", min, "-to", max,
+                "-increment", 1.0f,
+                "-textvariable", numvariable,
+                "-width", 8,
+                "-validate", "key",
+                "-validatecommand", "string is integer %P",
+                "-command", pdsend);
 
-        pdgui_vmess(0, "ssss", "bind", spinboxid, "<Return>", pdsend);
-        pdgui_vmess(0, "ssss", "bind", spinboxid, "<FocusOut>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", spinboxid, "<Return>", pdsend);
+    pdgui_vmess(0, "ssss", "bind", spinboxid, "<FocusOut>", pdsend);
 
-        pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0, "ssss", "pack", spinboxid, "-side", "top");
-        pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
+    pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+    pdgui_vmess(0, "ssss", "pack", spinboxid, "-side", "top");
+    pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
 
-        pdlua_properties_updaterow(&pdlua->properties);
+    pdlua_properties_updaterow(&pdlua->properties);
 #else
-        char init_value[MAXPDSTRING];
-        snprintf(init_value, MAXPDSTRING, "%d", init);
-        pdlua_add_property(text, "number", init_value, method);
+    char init_value[MAXPDSTRING];
+    snprintf(init_value, MAXPDSTRING, "%d", init);
+    purrdata_add_property(text, "number", init_value, method);
 #endif
-    }
-    else {
-        pd_error(NULL, "[pdlua] add_int: invalid args");
-    }
 
     return 0;
 }
 
 static int pdlua_properties_addfloat(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) &&
-        lua_isstring(L, 2) &&
-        lua_isstring(L, 3) &&
-        lua_isnumber(L, 4))
-    {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
-        const char *text = lua_tostring(L, 2);
-        const char *method = lua_tostring(L, 3);
-        double init = lua_tonumber(L, 4);
-        double min = luaL_optnumber(L, 5, -1e36);
-        double max = luaL_optnumber(L, 6, 1e36);
+    const char *text = luaL_checkstring(L, 2);
+    const char *method = luaL_checkstring(L, 3);
+    double init = luaL_checknumber(L, 4);
+    double min = luaL_optnumber(L, 5, -1e36);
+    double max = luaL_optnumber(L, 6, 1e36);
 
 #ifndef PURR_DATA
-        if(!pdlua->properties.current_frame)
-        {
-            pd_error(NULL, "[pdlua] add_float: no active frame");
-            return 0;
-        }
+    if(!pdlua->properties.current_frame)
+    {
+        pd_error(NULL, "[pdlua] add_float: no active frame");
+        return 0;
+    }
 
-        char pdsend[MAXPDSTRING];
-        char entryid[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char numvariable[MAXPDSTRING];
-        char container[MAXPDSTRING];
+    char pdsend[MAXPDSTRING];
+    char entryid[MAXPDSTRING];
+    char textid[MAXPDSTRING];
+    char numvariable[MAXPDSTRING];
+    char container[MAXPDSTRING];
 
-        pdlua_properties_buildvar(pdlua, numvariable);
+    pdlua_properties_buildvar(pdlua, numvariable);
 
-        pdgui_vmess(0, "ssf", "set", numvariable, init);
+    pdgui_vmess(0, "ssf", "set", numvariable, init);
 
-        snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties floatbox %s $%s]",
-                 pdlua->properties.properties_receiver->s_name, method, numvariable);
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties floatbox %s $%s]",
+             pdlua->properties.properties_receiver->s_name, method, numvariable);
 
-        snprintf(container, MAXPDSTRING, "%s.floatbox%d",
-                 pdlua->properties.current_frame->s_name,
-                 pdlua->properties.property_count);
+    snprintf(container, MAXPDSTRING, "%s.floatbox%d",
+             pdlua->properties.current_frame->s_name,
+             pdlua->properties.property_count);
 
-        pdgui_vmess(0, "ss", "frame", container);
+    pdgui_vmess(0, "ss", "frame", container);
 
-        snprintf(textid, MAXPDSTRING, "%s.label", container);
-        pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+    snprintf(textid, MAXPDSTRING, "%s.label", container);
+    pdgui_vmess(0, "ssss", "label", textid, "-text", text);
 
-        snprintf(entryid, MAXPDSTRING, "%s.entry", container);
+    snprintf(entryid, MAXPDSTRING, "%s.entry", container);
 
-        pdgui_vmess(0, "sssssissss", "entry", entryid,
-                    "-textvariable", numvariable,
-                    "-width", 8,
-                    "-validate", "key",
-                    "-validatecommand", "regexp {^-?[0-9]*\\.?[0-9]*$} %P");
-
-
-        char returncmd[MAXPDSTRING * 4];
-        snprintf(returncmd, sizeof(returncmd),
-            "bind %s <Return> {"
-            "  set v $%s;"
-            "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
-            "  pdsend \"%s _properties floatbox %s $%s\""
-            "}\n",
-            entryid,
-            numvariable,
-            min, numvariable, min,
-            max, numvariable, max,
-            pdlua->properties.properties_receiver->s_name, method, numvariable);
-        pdgui_vmess(0, "r", returncmd);
-
-        char focusoutcmd[MAXPDSTRING * 4];
-        snprintf(focusoutcmd, sizeof(focusoutcmd),
-            "bind %s <FocusOut> {"
-            "  set v $%s;"
-            "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
-            "  pdsend \"%s _properties floatbox %s $%s\""
-            "}\n",
-            entryid,
-            numvariable,
-            min, numvariable, min,
-            max, numvariable, max,
-            pdlua->properties.properties_receiver->s_name, method, numvariable);
-        pdgui_vmess(0, "r", focusoutcmd);
+    pdgui_vmess(0, "sssssissss", "entry", entryid,
+                "-textvariable", numvariable,
+                "-width", 8,
+                "-validate", "key",
+                "-validatecommand", "regexp {^-?[0-9]*\\.?[0-9]*$} %P");
 
 
-        pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0, "ssss", "pack", entryid, "-side", "top");
-        pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
+    char returncmd[MAXPDSTRING * 4];
+    snprintf(returncmd, sizeof(returncmd),
+        "bind %s <Return> {"
+        "  set v $%s;"
+        "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
+        "  pdsend \"%s _properties floatbox %s $%s\""
+        "}\n",
+        entryid,
+        numvariable,
+        min, numvariable, min,
+        max, numvariable, max,
+        pdlua->properties.properties_receiver->s_name, method, numvariable);
+    pdgui_vmess(0, "r", returncmd);
 
-        pdlua_properties_updaterow(&pdlua->properties);
+    char focusoutcmd[MAXPDSTRING * 4];
+    snprintf(focusoutcmd, sizeof(focusoutcmd),
+        "bind %s <FocusOut> {"
+        "  set v $%s;"
+        "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
+        "  pdsend \"%s _properties floatbox %s $%s\""
+        "}\n",
+        entryid,
+        numvariable,
+        min, numvariable, min,
+        max, numvariable, max,
+        pdlua->properties.properties_receiver->s_name, method, numvariable);
+    pdgui_vmess(0, "r", focusoutcmd);
+
+
+    pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+    pdgui_vmess(0, "ssss", "pack", entryid, "-side", "top");
+    pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
+
+    pdlua_properties_updaterow(&pdlua->properties);
 #else
-        char init_value[MAXPDSTRING];
-        snprintf(init_value, MAXPDSTRING, "%f", init);
-        pdlua_add_property(text, "number", init_value, method);
+    char init_value[MAXPDSTRING];
+    snprintf(init_value, MAXPDSTRING, "%f", init);
+    purrdata_add_property(text, "number", init_value, method);
 #endif
-    }
-    else {
-        pd_error(NULL, "[pdlua] add_float: invalid args");
-    }
 
     return 0;
 }
@@ -863,86 +777,75 @@ static int pdlua_properties_addfloat(lua_State *L)
 
 static int pdlua_properties_addcombo(lua_State *L)
 {
-    if (lua_isuserdata(L,1) &&
-        lua_isstring(L,2) &&
-        lua_isstring(L,3) &&
-        lua_isnumber(L,4) &&
-        lua_istable(L,5))
+    t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L,1);
+
+    const char *label = luaL_checkstring(L,2);
+    const char *method = luaL_checkstring(L,3);
+    int init = luaL_checknumber(L,4) - 1;
+
+    int options_count = lua_rawlen(L,5);
+    const char **opts = calloc(options_count, sizeof(char*));
+    for (int i = 0; i < options_count; i++)
     {
-        t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L,1);
-
-        const char *label = lua_tostring(L,2);
-        const char *method = lua_tostring(L,3);
-        int init = lua_tonumber(L,4) - 1;
-
-        int options_count = lua_rawlen(L,5);
-        const char **opts = calloc(options_count, sizeof(char*));
-        for (int i = 0; i < options_count; i++)
-        {
-            lua_rawgeti(L, 5, i+1);
-            opts[i] = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
-            lua_pop(L, 1);
-        }
+        lua_rawgeti(L, 5, i+1);
+        opts[i] = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 1);
+    }
 
 #ifndef PURR_DATA
-        char pdsend[MAXPDSTRING];
-        char comboid[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char combovar[MAXPDSTRING];
+    char pdsend[MAXPDSTRING];
+    char comboid[MAXPDSTRING];
+    char textid[MAXPDSTRING];
+    char combovar[MAXPDSTRING];
 
-        pdlua_properties_buildvar(pdlua, combovar);
+    pdlua_properties_buildvar(pdlua, combovar);
 
-        if(!pdlua->properties.current_frame)
-        {
-            pd_error(NULL, "[pdlua] add_combo: no active frame");
-            return 0;
-        }
-
-        if(init < options_count) {
-            pdgui_vmess(0,"sss","set", combovar, opts[init]);
-        }
-
-        snprintf(pdsend, MAXPDSTRING,
-                 "eval pdsend [concat %s _properties combobox %s [expr {[%%W current] + 1}]]",
-                 pdlua->properties.properties_receiver->s_name, method);
-
-        char container[MAXPDSTRING];
-        snprintf(container, MAXPDSTRING, "%s.combo%d", pdlua->properties.current_frame->s_name, pdlua->properties.property_count);
-
-        pdgui_vmess(0,"ss", "frame", container);
-
-        snprintf(textid, MAXPDSTRING, "%s.label", container);
-        pdgui_vmess(0,"ssss", "label", textid, "-text", label);
-
-        snprintf(comboid, MAXPDSTRING,"%s.widget",container);
-
-        pdgui_vmess(0,"sssssSsssi", "ttk::combobox", comboid, "-textvariable",combovar, "-values", options_count, opts, "-state", "readonly", "-width", 8);
-
-        pdgui_vmess(0,"ssss", "bind", comboid, "<<ComboboxSelected>>", pdsend);
-
-        pdgui_vmess(0,"ssss", "pack", textid, "-side", "top");
-        pdgui_vmess(0,"ssss", "pack", comboid, "-side", "top");
-
-        pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
-
-        pdlua_properties_updaterow(&pdlua->properties);
-#else
-        char init_value[MAXPDSTRING];
-        snprintf(init_value, MAXPDSTRING, "%d", init);
-        pdlua_add_property(text, "number", init_value, method);
-#endif
-        free(opts);
-    }
-    else
+    if(!pdlua->properties.current_frame)
     {
-        pd_error(NULL, "[pdlua] add_combo: invalid args");
+        pd_error(NULL, "[pdlua] add_combo: no active frame");
+        return 0;
     }
+
+    if(init < options_count) {
+        pdgui_vmess(0,"sss","set", combovar, opts[init]);
+    }
+
+    snprintf(pdsend, MAXPDSTRING,
+             "eval pdsend [concat %s _properties combobox %s [expr {[%%W current] + 1}]]",
+             pdlua->properties.properties_receiver->s_name, method);
+
+    char container[MAXPDSTRING];
+    snprintf(container, MAXPDSTRING, "%s.combo%d", pdlua->properties.current_frame->s_name, pdlua->properties.property_count);
+
+    pdgui_vmess(0,"ss", "frame", container);
+
+    snprintf(textid, MAXPDSTRING, "%s.label", container);
+    pdgui_vmess(0,"ssss", "label", textid, "-text", label);
+
+    snprintf(comboid, MAXPDSTRING,"%s.widget",container);
+
+    pdgui_vmess(0,"sssssSsssi", "ttk::combobox", comboid, "-textvariable",combovar, "-values", options_count, opts, "-state", "readonly", "-width", 8);
+
+    pdgui_vmess(0,"ssss", "bind", comboid, "<<ComboboxSelected>>", pdsend);
+
+    pdgui_vmess(0,"ssss", "pack", textid, "-side", "top");
+    pdgui_vmess(0,"ssss", "pack", comboid, "-side", "top");
+
+    pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
+
+    pdlua_properties_updaterow(&pdlua->properties);
+#else
+    char init_value[MAXPDSTRING];
+    snprintf(init_value, MAXPDSTRING, "%d", init);
+    purrdata_add_property(text, "number", init_value, method);
+#endif
+    free(opts);
 
     return 0;
 }
 #endif
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol *s, int argc, t_atom *argv)
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol * UNUSED(s), int argc, t_atom *argv)
 {
     if (argc < 2)
         return;

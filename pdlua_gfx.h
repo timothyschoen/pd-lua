@@ -292,10 +292,35 @@ static inline void plugdata_draw(t_pdlua *obj, int layer, t_symbol* sym, int arg
     }
 }
 
-static inline void plugdata_draw_path(t_symbol* sym, int argc, t_atom* argv)
+static inline void plugdata_draw_args(lua_State* L, const char* sym, const char *fmt, ...)
 {
-    if(plugdata_draw_callback) {
-        plugdata_draw_callback(NULL, -1, sym, argc, argv);
+    if (!lua_islightuserdata(L, 1))
+        return;
+
+    t_pdlua_gfx *gfx = pop_graphics_context(L);
+    t_atom atoms[16];
+    int argc = strlen(fmt);
+
+    va_list defaults;
+    va_start(defaults, fmt);
+
+    for (int i = 0; i < argc; i++)
+    {
+        int lua_idx = i + 1;
+        switch (fmt[i])
+        {
+            case 'f': SETFLOAT (&atoms[i], (t_float)luaL_checknumber(L, lua_idx)); break;
+            case 's': SETSYMBOL(&atoms[i], gensym(luaL_checkstring(L, lua_idx))); break;
+            case 'F': SETFLOAT (&atoms[i], (t_float)luaL_optnumber(L, lua_idx, va_arg(defaults, double))); break;
+            case 'S': SETSYMBOL(&atoms[i], gensym(luaL_optstring(L, lua_idx, va_arg(defaults, const char*)))); break;
+            default:  break;
+        }
+    }
+
+    va_end(defaults);
+
+    if (plugdata_draw_callback) {
+        plugdata_draw_callback(gfx->object, gfx->current_layer, gensym(sym), argc, atoms);
     }
 }
 
@@ -351,155 +376,67 @@ static int end_paint(lua_State* L) {
 }
 
 static int set_color(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    if (lua_gettop(L) == 1) { // Single argument: parse as color ID instead of RGB
-        t_atom arg;
-        SETFLOAT(&arg, luaL_checknumber(L, 1)); // color ID
-        plugdata_draw(obj, gfx->current_layer, gensym("lua_set_color"), 1, &arg);
+    if (lua_gettop(L) == 2) { // Single argument: parse as color ID instead of RGB
+        plugdata_draw_args(L, "lua_set_color", "f");
         return 0;
     }
 
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // r
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // g
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // b
-    SETFLOAT(args + 3, luaL_optnumber(L, 4, 1.0f)); // alpha (optional, default to 1.0)
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_set_color"), 4, args);
+    plugdata_draw_args(L, "lua_set_color", "fffF", 1.0);
     return 0;
 }
 
 static int fill_ellipse(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_ellipse"), 4, args);
+    plugdata_draw_args(L, "lua_fill_ellipse", "ffff");
     return 0;
 }
 
 static int stroke_ellipse(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // stroke width (optional, default to 1.0)
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_ellipse"), 5, args);
+    plugdata_draw_args(L, "lua_stroke_ellipse", "ffffF", 1.0);
     return 0;
 }
 
 static int fill_all(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_fill_all"), 0, NULL);
+    plugdata_draw_args(L, "lua_fill_all", "");
     return 0;
 }
 
 static int fill_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_rect"), 4, args);
+    plugdata_draw_args(L, "lua_fill_rect", "ffff");
     return 0;
 }
 
 static int stroke_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // stroke width (optional, default to 1.0)
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rect"), 5, args);
+    plugdata_draw_args(L, "lua_stroke_rect", "ffffF", 1.0f);
     return 0;
 }
 
 static int fill_rounded_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner radius
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_rounded_rect"), 5, args);
+    plugdata_draw_args(L, "lua_fill_rounded_rect", "fffff");
     return 0;
 }
 
 static int stroke_rounded_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[6];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner_radius
-    SETFLOAT(args + 5, luaL_optnumber(L, 6, 1.0f)); // stroke width (optional, default to 1.0)
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rounded_rect"), 6, args);
+    plugdata_draw_args(L, "lua_stroke_rounded_rect", "fffffF", 1.0f);
     return 0;
 }
 
 static int draw_line(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_optnumber(L, 5, 1.0f)); // line width (optional, default to 1.0)
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_line"), 5, args);
+    plugdata_draw_args(L, "lua_draw_line", "ffffF", 1.0f);
     return 0;
 }
 
 static int draw_text(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    const char* text = luaL_checkstring(L, 1);
-    t_atom args[6];
-    SETSYMBOL(args, gensym(text));
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // w
-    SETFLOAT(args + 4, luaL_optnumber(L, 5, 12.0f)); // font size
-    SETFLOAT(args + 5, luaL_optinteger(L, 6, 0)); // alignment
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_text"), 6, args);
+    plugdata_draw_args(L, "lua_draw_text", "sffffFF", 12.f, 0.0f);
     return 0;
 }
 
 static int draw_svg(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-
-    t_canvas *cnv = glist_getcanvas(obj->canvas);
-
-    t_atom args[3];
-    SETSYMBOL(args, gensym(luaL_checkstring(L, 1)));
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
-
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_svg"), 3, args);
+    plugdata_draw_args(L, "lua_draw_svg", "sff");
     return 0;
 }
 
 static int draw_image(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-
-    t_canvas *cnv = glist_getcanvas(obj->canvas);
-
-    t_atom args[3];
-    SETSYMBOL(args, gensym(luaL_checkstring(L, 1)));
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
-
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_image"), 3, args);
+    plugdata_draw_args(L, "lua_draw_image", "sff");
     return 0;
 }
 
@@ -552,29 +489,17 @@ static int fill_path(lua_State* L) {
 }
 
 static int translate(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    t_atom args[2];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // tx
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // ty
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_translate"), 2, args);
+    plugdata_draw_args(L, "lua_translate", "ff");
     return 0;
 }
 
 static int scale(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    t_atom args[2];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // sx
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // sy
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_scale"), 2, args);
+    plugdata_draw_args(L, "lua_scale", "ff");
     return 0;
 }
 
 static int reset_transform(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_reset_transform"), 0, NULL);
+    plugdata_draw_args(L, "lua_reset_transform", "");
     return 0;
 }
 

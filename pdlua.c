@@ -58,6 +58,77 @@
 #include "g_canvas.h"
 /* BAD: support for Pd < 0.41 */
 
+
+#if PD_MAJOR_VERSION == 0
+# if PD_MINOR_VERSION >= 41
+#  define PDLUA_PD41
+/* use new garray support that is 64-bit safe */
+#  define PDLUA_ARRAYGRAB garray_getfloatwords
+#  define PDLUA_ARRAYTYPE t_word
+#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)].w_float)
+# elif PD_MINOR_VERSION >= 40
+#  define PDLUA_PD40
+/* use old garray support, not 64-bit safe */
+#  define PDLUA_ARRAYGRAB garray_getfloatarray
+#  define PDLUA_ARRAYTYPE t_float
+#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)])
+# elif PD_MINOR_VERSION >= 39
+#  define PDLUA_PD39
+/* use old garray support, not 64-bit safe */
+#  define PDLUA_ARRAYGRAB garray_getfloatarray
+#  define PDLUA_ARRAYTYPE t_float
+#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)])
+# else
+#  error "Pd version is too old, please upgrade"
+# endif
+#else
+# error "Pd version is too new, please file a bug report"
+#endif
+
+#if PD_MINOR_VERSION >= 54
+# ifndef PD_MULTICHANNEL
+#  define PD_MULTICHANNEL 1
+# endif
+#else
+# pragma message("building without multi-channel support; requires Pd 0.54+")
+# undef PD_MULTICHANNEL
+# define PD_MULTICHANNEL 0
+# define CLASS_MULTICHANNEL 0
+#endif
+
+#ifdef UNUSED
+#elif defined(__GNUC__)
+# define UNUSED(x) UNUSED_ ## x __attribute__((unused))
+#elif defined(__LCLINT__)
+# define UNUSED(x) /*@unused@*/ x
+#else
+# define UNUSED(x) x
+#endif
+
+#if defined(__GNUC__) /* covers both GCC and Clang */
+#define PD_NEWMETHOD_CAST(f) \
+    _Pragma("GCC diagnostic push") \
+    _Pragma("GCC diagnostic ignored \"-Wcast-function-type\"") \
+    (t_newmethod)(f) \
+    _Pragma("GCC diagnostic pop")
+#else
+#define PD_NEWMETHOD_CAST(f) (t_newmethod)(f)
+#endif
+
+/* BAD: end of bad section */
+
+/* If defined, PDLUA_DEBUG lets pdlua post a lot of text */
+//#define PDLUA_DEBUG post
+#ifndef PDLUA_DEBUG
+//static void PDLUA_DEBUG(const char *fmt, ...) {;}
+# define PDLUA_DEBUG(x,y)
+# define PDLUA_DEBUG2(x,y0,y1)
+# define PDLUA_DEBUG3(x,y0,y1,y2)
+#else
+# define PDLUA_DEBUG2 PDLUA_DEBUG
+# define PDLUA_DEBUG3 PDLUA_DEBUG
+#endif
+
 #include "pdlua_gfx.h"
 #include "pdlua_properties.h"
 
@@ -140,7 +211,7 @@ void initialise_lua_state()
 #endif
 
 // class_new class names need to use gensym of the global pure-data instance
-t_symbol* global_gensym(char* s)
+t_symbol* global_gensym(const char* s)
 {
 #ifdef PDINSTANCE
     t_pdinstance* last_instance = pd_get_instance();
@@ -152,66 +223,6 @@ t_symbol* global_gensym(char* s)
 #endif
     return sym;
 }
-
-#if PD_MAJOR_VERSION == 0
-# if PD_MINOR_VERSION >= 41
-#  define PDLUA_PD41
-/* use new garray support that is 64-bit safe */
-#  define PDLUA_ARRAYGRAB garray_getfloatwords
-#  define PDLUA_ARRAYTYPE t_word
-#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)].w_float)
-# elif PD_MINOR_VERSION >= 40
-#  define PDLUA_PD40
-/* use old garray support, not 64-bit safe */
-#  define PDLUA_ARRAYGRAB garray_getfloatarray
-#  define PDLUA_ARRAYTYPE t_float
-#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)])
-# elif PD_MINOR_VERSION >= 39
-#  define PDLUA_PD39
-/* use old garray support, not 64-bit safe */
-#  define PDLUA_ARRAYGRAB garray_getfloatarray
-#  define PDLUA_ARRAYTYPE t_float
-#  define PDLUA_ARRAYELEM(arr,idx) ((arr)[(idx)])
-# else
-#  error "Pd version is too old, please upgrade"
-# endif
-#else
-# error "Pd version is too new, please file a bug report"
-#endif
-
-#if PD_MINOR_VERSION >= 54
-# ifndef PD_MULTICHANNEL
-#  define PD_MULTICHANNEL 1
-# endif
-#else
-# pragma message("building without multi-channel support; requires Pd 0.54+")
-# undef PD_MULTICHANNEL
-# define PD_MULTICHANNEL 0
-# define CLASS_MULTICHANNEL 0
-#endif
-
-#ifdef UNUSED
-#elif defined(__GNUC__)
-# define UNUSED(x) UNUSED_ ## x __attribute__((unused))
-#elif defined(__LCLINT__)
-# define UNUSED(x) /*@unused@*/ x
-#else
-# define UNUSED(x) x
-#endif
-
-/* BAD: end of bad section */
-
-/* If defined, PDLUA_DEBUG lets pdlua post a lot of text */
-//#define PDLUA_DEBUG post
-#ifndef PDLUA_DEBUG
-//static void PDLUA_DEBUG(const char *fmt, ...) {;}
-# define PDLUA_DEBUG(x,y)
-# define PDLUA_DEBUG2(x,y0,y1)
-# define PDLUA_DEBUG3(x,y0,y1,y2)
-#else
-# define PDLUA_DEBUG2 PDLUA_DEBUG
-# define PDLUA_DEBUG3 PDLUA_DEBUG
-#endif
 
 // In plugdata we're linked statically and thus c_externdir is empty.
 // So we pass a data directory to the setup function instead and store it here.
@@ -363,7 +374,7 @@ static int pdlua_dofile (lua_State *L);
 /** Initialize the pd API for Lua. */
 static void pdlua_init (lua_State *L);
 /** Pd loader hook for loading and executing Lua scripts. */
-static int pdlua_loader_legacy (t_canvas *canvas, char *name);
+static int pdlua_loader_legacy (t_canvas *canvas, char *name, char *path);
 /** Start the Lua runtime and register our loader hook. */
 #ifdef _WIN32
 __declspec(dllexport)
@@ -1510,14 +1521,14 @@ static int pdlua_class_new(lua_State *L)
     
     snprintf(name_gfx, MAXPDSTRING-1, "%s:gfx", name);
     PDLUA_DEBUG3("pdlua_class_new: L is %p, name is %s stack top is %d", L, name, lua_gettop(L));
-    c = class_new(global_gensym((char *) name), (t_newmethod) pdlua_new,
+    c = class_new(global_gensym((char *) name), PD_NEWMETHOD_CAST(pdlua_new),
         (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
     if (strcmp(name, "pdlua") && strcmp(name, "pdluax")) {
         // Shadow class for graphics objects. This is an exact clone of the
         // regular (non-gui) class, except that it has a different
         // widgetbehavior. We only need this for the regular Lua objects, the
         // pdlua and pdluax built-ins don't have this.
-        c_gfx = class_new(global_gensym((char *) name_gfx), (t_newmethod) pdlua_new,
+        c_gfx = class_new(global_gensym((char *) name_gfx), PD_NEWMETHOD_CAST(pdlua_new),
                 (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
         class_sethelpsymbol(c_gfx, gensym((char *) name));
     }
@@ -2817,6 +2828,7 @@ static int pdlua_setpropertiesfn(lua_State *L)
         class_setpropertiesfn(x->pdlua_class_gfx, pdlua_properties);
         class_addmethod(x->pdlua_class_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
     }
+    return 0;
 }
 
 static int pdlua_signal_setmultiout(lua_State *L)
@@ -3072,7 +3084,8 @@ static int pdlua_loader_wrappath
 static int pdlua_loader_legacy
 (
     t_canvas    *canvas, /**< Pd canvas to use to find the script. */
-    char        *name /**< The name of the script (without .pd_lua extension). */
+    char        *name, /**< The name of the script (without .pd_lua extension). */
+    char        *UNUSED(path) /**< Path variable for new loader, unused here */
 )
 {
     char                dirbuf[MAXPDSTRING];
