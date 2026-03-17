@@ -24,7 +24,7 @@ function hello:initialize(sel, atoms)
     self.mouse_down_pos = {0, 0}
     self.rect_down_pos = {0, 0}
 
-    self:set_size(720, 230)
+    self:set_size(850, 230)
     return true
 end
 
@@ -154,6 +154,7 @@ function hello:paint(g)
     g:draw_text("Animation", 460, 190, 120, 12)
     g:draw_text("   Mouse\nInteraction", 540, 190, 120, 12)
     g:draw_text("   SVG\nRendering", 640, 190, 120, 12)
+    g:draw_text("   Image\nRendering", 740, 190, 120, 12)
 end
 
 function hello:paint_layer_2(g)
@@ -181,6 +182,9 @@ function hello:paint_layer_4(g)
 
     g:draw_svg(svg_demo_1, 650, 40)
     g:draw_svg(svg_demo_2, 650, 120)
+
+    g:scale(0.8, 0.8)
+    g:draw_image("examples/pdlogo.gif", 900, 75)
 end
 
 function hello:tick()
