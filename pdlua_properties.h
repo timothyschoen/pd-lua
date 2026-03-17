@@ -49,6 +49,9 @@ static void pdlua_properties_setup(lua_State* L)
 }
 
 #ifdef PLUGDATA
+#ifdef _MSC_VER
+#define alloca _alloca
+#endif
 
 static inline void plugdata_add_property(lua_State* L, const char* sym, const char *fmt, ...)
 {
@@ -417,6 +420,11 @@ static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
     pdgui_vmess(0, "ssssssss", "button", buttonOkId,
         "-text", "OK", "-command", okCommand, "-default", okButtonState);
 
+    pdgui_vmess(0, "ssssss", "button", buttonCancelId,
+        "-text", "Cancel", "-command", destroyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId,
+        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
+
 #if __APPLE__
     char returnbind[MAXPDSTRING * 4];
     snprintf(returnbind, MAXPDSTRING * 4,
@@ -445,12 +453,17 @@ static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
         p->properties_receiver->s_name,
         (void *)p);
     pdgui_vmess(0, "r", returnbind);
+
+    char applyCommand[MAXPDSTRING];
+    snprintf(applyCommand, MAXPDSTRING,
+        "pdsend \"%s _properties apply\"",
+        p->properties_receiver->s_name);
+    pdgui_vmess(0, "ssssss", "button", buttonApplyId,
+        "-text", "Apply", "-command", applyCommand);
+    pdgui_vmess(0, "sssssisisi", "pack", buttonApplyId,
+        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
 #endif
 
-    pdgui_vmess(0, "ssssss", "button", buttonCancelId,
-        "-text", "Cancel", "-command", destroyCommand);
-    pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId,
-        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
     pdgui_vmess(0, "sssssisisi", "pack", buttonOkId,
         "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
 
