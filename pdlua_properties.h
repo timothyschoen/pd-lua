@@ -629,7 +629,7 @@ static int pdlua_properties_addcolor(lua_State *L) {
         pdgui_vmess(0, "ssssssssss", "label", colorboxid, "-text", "", "-width", "4", "-height", "2", "-background", initcolor, "-relief", "sunken", "-borderwidth", "1");
         pdgui_vmess(0, "ssss", colorboxid, "configure", "-cursor", "hand2");
 
-        sys_gui(
+        pdgui_vmess(0, "r",
         "proc pdlua_choose_color {widget receiver method} {\n"
         "    set current [ $widget cget -background ]\n"
         "\n"
@@ -802,7 +802,7 @@ static int pdlua_properties_addfloat(lua_State *L)
             min, numvariable, min,
             max, numvariable, max,
             pdlua->properties.properties_receiver->s_name, method, numvariable);
-        sys_gui(returncmd);
+        pdgui_vmess(0, "r", returncmd);
 
         char focusoutcmd[MAXPDSTRING * 4];
         snprintf(focusoutcmd, sizeof(focusoutcmd),
@@ -816,7 +816,7 @@ static int pdlua_properties_addfloat(lua_State *L)
             min, numvariable, min,
             max, numvariable, max,
             pdlua->properties.properties_receiver->s_name, method, numvariable);
-        sys_gui(focusoutcmd);
+        pdgui_vmess(0, "r", focusoutcmd);
 
 
         pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
