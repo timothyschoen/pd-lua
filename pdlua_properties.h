@@ -108,16 +108,15 @@ static int pdlua_properties_addcheck(lua_State *L)
 
 static int pdlua_properties_addtext(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
-        t_atom atoms[4];
+        t_atom atoms[3];
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
         SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
         SETSYMBOL(&atoms[2], gensym(lua_tostring(L, 4)));
-        SETFLOAT (&atoms[3], (t_float)lua_tonumber(L, 5));
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_text_property"), 4, atoms);
+        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_text_property"), 3, atoms);
     } else {
         pd_error(NULL, "[pdlua] add_text: invalid args");
     }
@@ -126,14 +125,49 @@ static int pdlua_properties_addtext(lua_State *L)
 
 static int pdlua_properties_addcolor(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && (lua_isstring(L, 4) || lua_istable(L, 4) ))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
 
-        t_atom atoms[2];
+        t_atom atoms[3];
         SETSYMBOL(&atoms[0], gensym(lua_tostring(L, 2)));
         SETSYMBOL(&atoms[1], gensym(lua_tostring(L, 3)));
-        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_color_property"), 2, atoms);
+
+        char initcolor[16];
+        if (lua_isstring(L, 4)) {
+            const char *init = lua_tostring(L, 4);
+            snprintf(initcolor, sizeof(initcolor), "%s", init);
+        }
+        else if (lua_istable(L, 4)) {
+            lua_rawgeti(L, 4, 1);
+            lua_rawgeti(L, 4, 2);
+            lua_rawgeti(L, 4, 3);
+
+            double r = luaL_checknumber(L, -3);
+            double g = luaL_checknumber(L, -2);
+            double b = luaL_checknumber(L, -1);
+
+            lua_pop(L, 3);
+
+            if (r <= 1.0 && g <= 1.0 && b <= 1.0) {
+                r *= 255.0;
+                g *= 255.0;
+                b *= 255.0;
+            }
+
+            int ri = (int)(r < 0 ? 0 : (r > 255 ? 255 : r));
+            int gi = (int)(g < 0 ? 0 : (g > 255 ? 255 : g));
+            int bi = (int)(b < 0 ? 0 : (b > 255 ? 255 : b));
+
+            snprintf(initcolor, sizeof(initcolor), "#%02x%02x%02x", ri, gi, bi);
+        }
+        else {
+            pd_error(NULL, "[pdlua] add_color: invalid init value");
+            return 0;
+        }
+        SETSYMBOL(&atoms[2], gensym(initcolor));
+
+        pdlua->properties.plugdata_properties_callback(pdlua, gensym("add_color_property"), 3, atoms);
     } else {
         pd_error(NULL, "[pdlua] add_color: invalid args");
     }
@@ -532,43 +566,93 @@ static int pdlua_properties_addtext(lua_State *L)
     return 0;
 }
 
-// static int pdlua_dialog_createcolorpicker(t_pdlua *x, const char *text, const char *method) {
 static int pdlua_properties_addcolor(lua_State *L) {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) &&
+        (lua_isstring(L, 4) || lua_istable(L, 4)))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
 
+        char initcolor[16];
+        if (lua_isstring(L, 4)) {
+            const char *init = lua_tostring(L, 4);
+            snprintf(initcolor, sizeof(initcolor), "%s", init);
+        }
+        else if (lua_istable(L, 4)) {
+            lua_rawgeti(L, 4, 1);
+            lua_rawgeti(L, 4, 2);
+            lua_rawgeti(L, 4, 3);
+
+            double r = luaL_checknumber(L, -3);
+            double g = luaL_checknumber(L, -2);
+            double b = luaL_checknumber(L, -1);
+
+            lua_pop(L, 3);
+
+            if (r <= 1.0 && g <= 1.0 && b <= 1.0) {
+                r *= 255.0;
+                g *= 255.0;
+                b *= 255.0;
+            }
+
+            int ri = (int)(r < 0 ? 0 : (r > 255 ? 255 : r));
+            int gi = (int)(g < 0 ? 0 : (g > 255 ? 255 : g));
+            int bi = (int)(b < 0 ? 0 : (b > 255 ? 255 : b));
+
+            snprintf(initcolor, sizeof(initcolor), "#%02x%02x%02x", ri, gi, bi);
+        }
+        else {
+            pd_error(NULL, "[pdlua] add_color: invalid init value");
+            return 0;
+        }
+
 #ifndef PURR_DATA
-        if(!pdlua->properties.current_frame)
-        {
+        if (!pdlua->properties.current_frame) {
             pd_error(NULL, "[pdlua] add_color: no active frame");
             return 0;
         }
 
+        char container[MAXPDSTRING];
+        char textid[MAXPDSTRING];
+        char colorboxid[MAXPDSTRING];
         char pdsend[MAXPDSTRING];
-        char buttonid[MAXPDSTRING];
-        char colorvariable[MAXPDSTRING];
 
-        pdlua_properties_buildvar(pdlua, colorvariable);
-
-        // Initialize the Tcl variable to a default color
-        pdgui_vmess(0, "sss", "set", colorvariable, "#ffffff");
-
-        // Build the pdsend command to trigger color picker and send result
-        snprintf(pdsend, MAXPDSTRING,
-            "eval pdsend [concat %s _properties colorpicker %s [tk_chooseColor -initialcolor {#ffffff} -title {Choose color}]]",
-                pdlua->properties.properties_receiver->s_name, method);
-
-        // Create the color picker button with the constructed command
-        snprintf(buttonid, MAXPDSTRING, "%s.colorpicker%d", pdlua->properties.current_frame->s_name,
+        snprintf(container, MAXPDSTRING, "%s.color%d",
+                 pdlua->properties.current_frame->s_name,
                  pdlua->properties.property_count);
-        pdgui_vmess(0, "ssssss", "button", buttonid, "-text", text, "-command", pdsend);
+        snprintf(textid, MAXPDSTRING, "%s.label", container);
+        snprintf(colorboxid, MAXPDSTRING, "%s.box", container);
 
-        pdgui_vmess(0, "sssisi", "grid", buttonid, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col,
-                    "-sticky", "we");
+        pdgui_vmess(0, "ss", "frame", container);
+        pdgui_vmess(0, "ssss", "label", textid, "-text", text);
+        pdgui_vmess(0, "ssssssssss", "label", colorboxid, "-text", "", "-width", "4", "-height", "2", "-background", initcolor, "-relief", "sunken", "-borderwidth", "1");
+        pdgui_vmess(0, "ssss", colorboxid, "configure", "-cursor", "hand2");
+
+        sys_gui(
+        "proc pdlua_choose_color {widget receiver method} {\n"
+        "    set current [ $widget cget -background ]\n"
+        "\n"
+        "    set c [tk_chooseColor -initialcolor $current -title \"Choose color\"]\n"
+        "\n"
+        "    if {$c ne \"\"} {\n"
+        "        $widget configure -background $c\n"
+        "\n"
+        "        pdsend [concat $receiver _properties colorpicker $method $c]\n"
+        "    }\n"
+        "}\n");
+
+        snprintf(pdsend, MAXPDSTRING, "pdlua_choose_color %s %s %s", colorboxid, pdlua->properties.properties_receiver->s_name, method);
+
+        pdgui_vmess(0, "ssss", "bind", colorboxid, "<Button-1>", pdsend);
+
+        pdgui_vmess(0, "ssss", "pack", textid, "-side", "top");
+        pdgui_vmess(0, "ssssss", "pack", colorboxid, "-side", "top", "-pady", "2");
+
+        pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "w");
+
         pdlua_properties_updaterow(&pdlua->properties);
+
 #else
         // TODO: purr-data implementation
 #endif
@@ -751,6 +835,7 @@ static int pdlua_properties_addfloat(lua_State *L)
     return 0;
 }
 
+
 static int pdlua_properties_addcombo(lua_State *L)
 {
     if (lua_isuserdata(L,1) &&
@@ -806,7 +891,7 @@ static int pdlua_properties_addcombo(lua_State *L)
 
         snprintf(comboid, MAXPDSTRING,"%s.widget",container);
 
-        pdgui_vmess(0,"sssssSss", "ttk::combobox", comboid, "-textvariable",combovar, "-values", options_count, opts, "-state", "readonly");
+        pdgui_vmess(0,"sssssSsssi", "ttk::combobox", comboid, "-textvariable",combovar, "-values", options_count, opts, "-state", "readonly", "-width", 8);
 
         pdgui_vmess(0,"ssss", "bind", comboid, "<<ComboboxSelected>>", pdsend);
 
