@@ -381,6 +381,7 @@ static int pdlua_properties_newframe(lua_State *L)
         const char *title = lua_tostring(L, 2);
         int col = lua_tonumber(L, 3);
 
+#ifndef PURR_DATA
         pdlua->properties.frame_count++;
         char current_frameid[MAXPDSTRING];
         snprintf(current_frameid, MAXPDSTRING, ".%p.main.frame%d", (void *)&pdlua->properties, pdlua->properties.frame_count);
@@ -412,6 +413,9 @@ static int pdlua_properties_newframe(lua_State *L)
         pdlua->properties.max_col = col;
         pdlua->properties.current_col = 0;
         pdlua->properties.current_row = 0;
+#else
+        // TODO: purr-data implementation
+#endif
     } else{
         pd_error(NULL, "[pdlua] new_frame: invalid args");
 
@@ -427,10 +431,8 @@ static int pdlua_properties_addcheck(lua_State *L)
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
         int init_value = lua_tonumber(L, 4);
-        if (pdlua == NULL){
-            return 0 ;
-        }
 
+#ifndef PURR_DATA
         if(!pdlua->properties.current_frame)
         {
             pd_error(NULL, "[pdlua] add_check: no active frame");
@@ -458,6 +460,9 @@ static int pdlua_properties_addcheck(lua_State *L)
         pdgui_vmess(0, "sssisi", "grid", checkid, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col,
                     "-sticky", "we");
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
     } else {
         pd_error(NULL, "[pdlua] add_check: invalid args");
     }
@@ -473,11 +478,8 @@ static int pdlua_properties_addtext(lua_State *L)
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
         const char *init_value = lua_tostring(L, 4);
-        if (pdlua == NULL){
-            mylua_error(__L(), pdlua, "pdlua is NULL");
-            return 0 ;
-        }
 
+#ifndef PURR_DATA
         if(!pdlua->properties.current_frame)
         {
             pd_error(NULL, "[pdlua] add_text: no active frame");
@@ -521,6 +523,9 @@ static int pdlua_properties_addtext(lua_State *L)
         pdgui_vmess(0, "sssisisssi", "grid", text_button_frame, "-row", pdlua->properties.current_row, "-column",
                     pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
     } else {
         pd_error(NULL, "[pdlua] add_text: invalid args");
     }
@@ -535,6 +540,7 @@ static int pdlua_properties_addcolor(lua_State *L) {
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
 
+#ifndef PURR_DATA
         if(!pdlua->properties.current_frame)
         {
             pd_error(NULL, "[pdlua] add_color: no active frame");
@@ -563,6 +569,9 @@ static int pdlua_properties_addcolor(lua_State *L) {
         pdgui_vmess(0, "sssisi", "grid", buttonid, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col,
                     "-sticky", "we");
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
     } else {
         pd_error(NULL, "[pdlua] add_color: invalid args");
     }
@@ -585,6 +594,7 @@ static int pdlua_properties_addint(lua_State *L)
         double min = luaL_optnumber(L, 5, -1e36);
         double max = luaL_optnumber(L, 6, 1e36);
 
+#ifndef PURR_DATA
         if(!pdlua->properties.current_frame)
         {
             pd_error(NULL, "[pdlua] add_int: no active frame");
@@ -632,6 +642,9 @@ static int pdlua_properties_addint(lua_State *L)
         pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
 
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
     }
     else {
         pd_error(NULL, "[pdlua] add_int: invalid args");
@@ -655,6 +668,7 @@ static int pdlua_properties_addfloat(lua_State *L)
         double min = luaL_optnumber(L, 5, -1e36);
         double max = luaL_optnumber(L, 6, 1e36);
 
+#ifndef PURR_DATA
         if(!pdlua->properties.current_frame)
         {
             pd_error(NULL, "[pdlua] add_float: no active frame");
@@ -726,6 +740,9 @@ static int pdlua_properties_addfloat(lua_State *L)
         pdgui_vmess(0, "sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
 
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
     }
     else {
         pd_error(NULL, "[pdlua] add_float: invalid args");
@@ -749,14 +766,6 @@ static int pdlua_properties_addcombo(lua_State *L)
         int init = lua_tonumber(L,4) - 1;
 
         int options_count = lua_rawlen(L,5);
-
-        char pdsend[MAXPDSTRING];
-        char comboid[MAXPDSTRING];
-        char textid[MAXPDSTRING];
-        char combovar[MAXPDSTRING];
-
-        pdlua_properties_buildvar(pdlua, combovar);
-
         const char **opts = calloc(options_count, sizeof(char*));
         for (int i = 0; i < options_count; i++)
         {
@@ -764,6 +773,14 @@ static int pdlua_properties_addcombo(lua_State *L)
             opts[i] = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
             lua_pop(L, 1);
         }
+
+#ifndef PURR_DATA
+        char pdsend[MAXPDSTRING];
+        char comboid[MAXPDSTRING];
+        char textid[MAXPDSTRING];
+        char combovar[MAXPDSTRING];
+
+        pdlua_properties_buildvar(pdlua, combovar);
 
         if(!pdlua->properties.current_frame)
         {
@@ -799,6 +816,9 @@ static int pdlua_properties_addcombo(lua_State *L)
         pdgui_vmess(0,"sssisiss", "grid", container, "-row", pdlua->properties.current_row, "-column", pdlua->properties.current_col, "-sticky", "we");
 
         pdlua_properties_updaterow(&pdlua->properties);
+#else
+        // TODO: purr-data implementation
+#endif
         free(opts);
     }
     else
