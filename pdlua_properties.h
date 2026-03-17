@@ -467,13 +467,12 @@ static int pdlua_properties_addcheck(lua_State *L)
 
 static int pdlua_properties_addtext(lua_State *L)
 {
-    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4) && lua_isnumber(L, 5))
+    if (lua_isuserdata(L, 1) && lua_isstring(L, 2) && lua_isstring(L, 3) && lua_isstring(L, 4))
     {
         t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
         const char *text = lua_tostring(L, 2);
         const char *method = lua_tostring(L, 3);
         const char *init_value = lua_tostring(L, 4);
-        int width = lua_tonumber(L, 5);
         if (pdlua == NULL){
             mylua_error(__L(), pdlua, "pdlua is NULL");
             return 0 ;
@@ -512,7 +511,7 @@ static int pdlua_properties_addtext(lua_State *L)
         pdgui_vmess(0, "ssss", "label", textid, "-text", text);
 
         snprintf(entryid, MAXPDSTRING, "%s.textbox%d", text_button_frame, pdlua->properties.property_count);
-        pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", width);
+        pdgui_vmess(0, "sssssi", "entry", entryid, "-textvariable", textvariable, "-width", 8);
         pdgui_vmess(0, "ssss", "bind", entryid, "<Return>", pdsend);
         pdgui_vmess(0, "ssss", "bind", entryid, "<FocusOut>", pdsend);
 

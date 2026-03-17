@@ -28,8 +28,8 @@ function properties:properties(p)
 
     -- Text inputs
     p:new_frame("First textinput", 2)
-    p:add_text("Check text 1", "updatetext1", self.textinput1, 5)
-    p:add_text("Check text 2", "updatetext2", self.textinput2, 5)
+    p:add_text("Check text 1", "updatetext1", self.textinput1)
+    p:add_text("Check text 2", "updatetext2", self.textinput2)
 
     -- Color picker
     p:new_frame("My Color Picker", 1)
