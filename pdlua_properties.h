@@ -401,35 +401,64 @@ static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
     char destroyCommand[MAXPDSTRING];
     snprintf(destroyCommand, MAXPDSTRING, "destroy .%p", (void *)p);
 
-    // Criando o frame dos botões
     pdgui_vmess(0, "sssf", "frame", buttonsId, "-pady", 5.0f);
     pdgui_vmess(0, "ssss", "pack", buttonsId, "-fill", "x");
 
-
-    char applyCommand[MAXPDSTRING];
-    snprintf(applyCommand, MAXPDSTRING,
-        "pdsend \"%s _properties apply\"",
-        p->properties_receiver->s_name);
+#if __APPLE__
+    const char* okButtonState = "normal";
+#else
+    const char* okButtonState = "active";
+#endif
 
     char okCommand[MAXPDSTRING * 2];
     snprintf(okCommand, MAXPDSTRING * 2,
         "pdsend \"%s _properties apply\"; destroy .%p",
         p->properties_receiver->s_name, (void *)p);
+    pdgui_vmess(0, "ssssssss", "button", buttonOkId,
+        "-text", "OK", "-command", okCommand, "-default", okButtonState);
+
+#if __APPLE__
+    char returnbind[MAXPDSTRING * 4];
+    snprintf(returnbind, MAXPDSTRING * 4,
+        "bind %s <Return> {"
+        "  catch {"
+        "    if {[focus] eq \"%s\"} {%s} "
+        "    else {"
+        "      pdsend \"%s _properties apply\";"
+        "      %s configure -default active;"
+        "      focus %s"
+        "    }"
+        "  };"
+        "  break"
+        "}",
+        p->properties_receiver->s_name,
+        buttonOkId, okCommand,
+        p->properties_receiver->s_name,
+        buttonOkId,
+        buttonOkId);
+    pdgui_vmess(0, "r", returnbind);
+#else
+    char returnbind[MAXPDSTRING * 2];
+    snprintf(returnbind, MAXPDSTRING * 2,
+        "bind %s <Return> {catch {pdsend \"%s _properties apply\"; destroy .%p}; break}",
+        p->properties_receiver->s_name,
+        p->properties_receiver->s_name,
+        (void *)p);
+    pdgui_vmess(0, "r", returnbind);
+#endif
 
     pdgui_vmess(0, "ssssss", "button", buttonCancelId,
         "-text", "Cancel", "-command", destroyCommand);
     pdgui_vmess(0, "sssssisisi", "pack", buttonCancelId,
         "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
-
-    pdgui_vmess(0, "ssssss", "button", buttonApplyId,
-        "-text", "Apply", "-command", applyCommand);
-    pdgui_vmess(0, "sssssisisi", "pack", buttonApplyId,
-        "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
-
-    pdgui_vmess(0, "ssssss", "button", buttonOkId,
-        "-text", "OK", "-command", okCommand);
     pdgui_vmess(0, "sssssisisi", "pack", buttonOkId,
         "-side", "left", "-expand", 1, "-padx", 10, "-ipadx", 10);
+
+    char okReturnBind[MAXPDSTRING * 2];
+    snprintf(okReturnBind, MAXPDSTRING * 2,
+        "bind %s <Return> {%s}",
+        buttonOkId, okCommand);
+    pdgui_vmess(0, "r", okReturnBind);
 #else
 
     t_symbol *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, x);
@@ -669,6 +698,9 @@ static int pdlua_properties_addcolor(lua_State *L) {
     "        $widget configure -background $c\n"
     "\n"
     "        pdsend [concat $receiver _properties colorpicker $method $c]\n"
+#if __APPLE__
+    "        pdsend [concat $receiver _properties apply]\n"
+#endif
     "    }\n"
     "}\n");
 
