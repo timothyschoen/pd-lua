@@ -748,7 +748,7 @@ static t_pdlua *pdlua_new
         char                *ptr;
         t_pdlua_readerdata  reader;
         t_canvas* current = canvas_getcurrent();
-        int fd = canvas_open(current, s->s_name, ".pd_lua", buf, &ptr, MAXPDSTRING, 1);
+        int fd = canvas_open(current, s->s_name, LUA_FILE_EXTENSION, buf, &ptr, MAXPDSTRING, 1);
         if (fd >= 0)
         {
             PDLUA_DEBUG("basename open: stack top %d", lua_gettop(__L()));
@@ -769,7 +769,7 @@ static t_pdlua *pdlua_new
             pdlua_setrequirepath(__L(), buf);
             class_set_extern_dir(global_gensym(buf));
             strncpy(buf, s->s_name, MAXPDSTRING - 8);
-            strcat(buf, ".pd_lua");
+            strcat(buf, LUA_FILE_EXTENSION);
             reader.fd = fd;
             n = lua_gettop(__L());
 #if LUA_VERSION_NUM	< 502
@@ -3087,7 +3087,7 @@ static int pdlua_loader_legacy
     char                *ptr;
     int                 fd;
 
-    fd = canvas_open(canvas, name, ".pd_lua", dirbuf, &ptr, MAXPDSTRING, 1);
+    fd = canvas_open(canvas, name, LUA_FILE_EXTENSION, dirbuf, &ptr, MAXPDSTRING, 1);
     return pdlua_loader_wrappath(fd, name, dirbuf);
 }
 
