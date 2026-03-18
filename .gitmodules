@@ -1,3 +1,9 @@
-[submodule "lua"]
-	path = lua
+[submodule "luas/lua-compat-5.3"]
+	path = luas/lua-compat-5.3
+	url = https://github.com/lunarmodules/lua-compat-5.3.git
+[submodule "luas/luajit"]
+	path = luas/luajit
+	url = https://github.com/LuaJIT/LuaJIT
+[submodule "luas/lua"]
+	path = luas/lua
 	url = https://github.com/lua/lua.git

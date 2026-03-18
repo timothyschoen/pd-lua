@@ -607,7 +607,6 @@ function lua:in_1_load(atoms)  -- execute a script
   self:dofile(atoms[1])
 end
 
-
 local luax = pd.Class:new():register("pdluax")  -- classless lua externals (like [pdluax foo])
 
 function luax:initialize(sel, atoms)          -- motivation: pd-list 2007-09-23

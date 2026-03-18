@@ -1,5 +1,6 @@
 #N canvas 849 44 951 1016 10;
 #X declare -lib pdlua;
+#X declare -lib pdluajit;
 #X obj 784 43 declare -lib pdlua;
 #X obj 33 87 props;
 #X text 25 18 pdlua's properties allow you to add properties panels to both text and gui pdlua objects.;
@@ -18,3 +19,4 @@
 #X text 366 665 -- Add a section with a title. This is required before adding properties. Properties get added to the last defined frame. The column argument is ignored for plugdata \; -- Add a checkbox property \; -- Add a text input property \; -- Add a color picker property \; -- Add a floating-point number property \; -- Add an integer number property \; -- Add a combo box property \, options should be a list of items in curly brackets, f 104;
 #X text 33 397 p:add_text("Text 1" \, "updatetext1" \, self.textinput1), f 61;
 #X text 30 629 -- Functions you can call \; pd:Class:properties(p) \; \; p:new_frame(name \, column) \; \; p:add_check(label \, callback \, init) \; p:add_text(label \, callback \, init) \; p:add_color(label \, callback \, init) \; p:add_float(label \, callback \, init \, min=-inf \, max=inf) \; p:add_int(label \, callback \, init \, min=-inf \, max=inf) \; p:add_combo(label \, callback \, init \, options) \;;
+#X obj 766 85 declare -lib pdluajit;

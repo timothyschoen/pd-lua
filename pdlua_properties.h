@@ -154,7 +154,7 @@ cleanup:
     va_end(defaults);
 }
 
-static void pdlua_properties(t_gobj *z, t_glist * UNUSED(owner))
+static void pdlua_properties(t_gobj *z, t_glist * IGNORE_UNUSED(owner))
 {
     t_pdlua *pdlua = (t_pdlua *)z;
     lua_State *L = __L();
@@ -218,7 +218,7 @@ static int pdlua_properties_addcombo(lua_State *L)
     return 0;
 }
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol * UNUSED(s), int argc, t_atom *argv)
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), int argc, t_atom *argv)
 {
     if (argc < 2)
         return;
@@ -318,7 +318,7 @@ static void pdlua_properties_updaterow(t_pdlua_properties *p)
     }
 }
 
-static void pdlua_properties(t_gobj *z, t_glist *UNUSED(owner)) {
+static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 
     t_pdlua *pdlua = (t_pdlua *)z;
     t_pdlua_properties *p = &pdlua->properties;
@@ -1015,7 +1015,7 @@ static void pdlua_properties_apply(t_pdlua *o)
     p->pending_count = 0;
 }
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol *UNUSED(s), int argc, t_atom *argv)
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol *IGNORE_UNUSED(s), int argc, t_atom *argv)
 {
     if (argc < 1) return;
 
@@ -1065,5 +1065,3 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol *UNUSED(s), int argc,
 }
 
 #endif
-
-

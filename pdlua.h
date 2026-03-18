@@ -66,7 +66,7 @@ typedef struct _pdlua_gfx
     // Size variables
     int width, height;
     void *object;
-    
+
 #ifndef PLUGDATA
     char object_tag[128]; // Tcl/tk tag that is attached to all drawings
     char order_tag[64]; // Tag for invisible line, used to preserve correct object ordering
@@ -77,7 +77,7 @@ typedef struct _pdlua_gfx
     gfx_transform* transforms;
     int num_transforms;
     char current_color[10]; // Keep track of current color
-    
+
     // Variables to keep track of mouse position, button state and whether the mouse is inside the object
     int mouse_x, mouse_y, mouse_down, mouse_inside;
     int first_draw;
@@ -94,7 +94,7 @@ typedef struct _pdlua_gfx
 
 
 /** Pd object data. */
-typedef struct pdlua 
+typedef struct pdlua
 {
     t_object                pd;               // We are a Pd object.
     int                     inlets;           // Number of inlets.
@@ -116,4 +116,4 @@ typedef struct pdlua
     t_signal                **sp;             // Array of signal pointers for multichannel audio.
 } t_pdlua;
 
-lua_State* __L();
+static lua_State* __L();

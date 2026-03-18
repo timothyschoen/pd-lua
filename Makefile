@@ -15,7 +15,7 @@ lib.name = pdlua
 
 pdlua_version := $(shell git describe --tags 2>/dev/null)
 
-luasrc = $(wildcard lua/onelua.c)
+luasrc = $(wildcard luas/lua/onelua.c)
 
 PKG_CONFIG ?= pkg-config
 
@@ -27,7 +27,7 @@ lualibs = $(shell $(PKG_CONFIG) --libs lua)
 else
 # compile with Lua submodule
 $(info ++++ NOTE: using lua submodule)
-luaflags = -DMAKE_LIB -Ilua
+luaflags = -DMAKE_LIB -Iluas/luajit/src
 define forDarwin
 luaflags += -DLUA_USE_MACOSX
 endef
@@ -39,13 +39,16 @@ luaflags += -DLUA_USE_WINDOWS
 endef
 endif
 
-cflags = ${luaflags} -DPDLUA_VERSION="$(pdlua_version)"
+luajit_dir = ./luas/luajit
+luajit_lib = $(luajit_dir)/src/libluajit.a
+
+cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)"
 ifdef PD_MULTICHANNEL
     cflags += -DPD_MULTICHANNEL=$(PD_MULTICHANNEL)
 endif
 
-pdlua.class.sources := pdlua.c $(luasrc)
-pdlua.class.ldlibs := $(lualibs)
+pdlua.class.sources := luas/lua.c luas/luajit.c
+pdlua.class.ldlibs := $(lualibs) $(luajit_lib)
 
 datafiles = \
 	pd.lua $(wildcard pdlua*-help.pd) \
@@ -56,6 +59,29 @@ datafiles = \
 # so we need to list all of them
 datadirs = $(shell find pdlua -type d)
 
-
 PDLIBBUILDER_DIR=.
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
+
+compat53_headers = \
+    luas/lua-compat-5.3/compat53/compat53_init.h \
+    luas/lua-compat-5.3/compat53/compat53_module.h \
+    luas/lua-compat-5.3/compat53/compat53_file_mt.h
+
+$(luajit_lib):
+ifeq ($(system), Windows)
+	$(MAKE) -C $(luajit_dir) SHELL=cmd
+	mv $(luajit_dir)/src/libluajit-5.1.dll.a $(luajit_lib)
+else
+	$(MAKE) -C $(luajit_dir) CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.11
+endif
+
+# Generate binary data headers for compat53 lua files, so we can load them on init
+luas/lua-compat-5.3/compat53/compat53_init.h: luas/lua-compat-5.3/compat53/init.lua
+	xxd -i $< > $@
+luas/lua-compat-5.3/compat53/compat53_module.h: luas/lua-compat-5.3/compat53/module.lua
+	xxd -i $< > $@
+luas/lua-compat-5.3/compat53/compat53_file_mt.h: luas/lua-compat-5.3/compat53/file_mt.lua
+	xxd -i $< > $@
+luas/luajit.$(extension).o: $(compat53_headers)
+
+pdlua.$(extension): $(luajit_lib)

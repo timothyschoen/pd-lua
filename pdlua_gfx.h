@@ -22,19 +22,25 @@
  */
 
 #if !defined(PLUGDATA) && !defined(PURR_DATA)
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 #define NANOSVG_IMPLEMENTATION
 #include "svg/nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "svg/nanosvgrast.h"
-
+#define STB_IMAGE_STATIC
 #define STBI_NO_THREAD_LOCALS
 #define STB_IMAGE_IMPLEMENTATION
 #include "svg/stb_image.h"
+#define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "svg/stb_image_write.h"
+#define STB_IMAGE_RESIZE_STATIC
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "svg/stb_image_resize2.h"
 #endif
+#pragma GCC diagnostic pop
 
 #ifdef PURR_DATA
 
@@ -199,9 +205,9 @@ typedef struct _path_state
 // Pops the graphics context off the argument list and returns it
 static t_pdlua_gfx *pop_graphics_context(lua_State* L)
 {
-    t_pdlua_gfx* ctx = (t_pdlua_gfx*)luaL_checkudata(L, 1, "GraphicsContext");
+    t_pdlua_gfx **ud = (t_pdlua_gfx**)luaL_checkudata(L, 1, "GraphicsContext");
     lua_remove(L, 1);
-    return ctx;
+    return *ud;
 }
 
 // Register functions with Lua
@@ -294,9 +300,6 @@ static inline void plugdata_draw(t_pdlua *obj, int layer, t_symbol* sym, int arg
 
 static inline void plugdata_draw_args(lua_State* L, const char* sym, const char *fmt, ...)
 {
-    if (!lua_islightuserdata(L, 1))
-        return;
-
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_atom atoms[16];
     int argc = strlen(fmt);
@@ -357,7 +360,8 @@ static int start_paint(lua_State* L) {
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     int layer = luaL_checknumber(L, 2);
 
-    lua_pushlightuserdata(L, &obj->gfx);
+    t_pdlua_gfx **ud = (t_pdlua_gfx**)lua_newuserdata(L, sizeof(t_pdlua_gfx*));
+    *ud = &obj->gfx;
     luaL_setmetatable(L, "GraphicsContext");
 
     plugdata_draw_callback = obj->gfx.plugdata_draw_callback;
@@ -891,7 +895,8 @@ static int start_paint(lua_State* L) {
         gfx->num_transforms = 0;
         gfx->transforms = NULL;
 
-        lua_pushlightuserdata(L, gfx);
+        t_pdlua_gfx **ud = (t_pdlua_gfx**)lua_newuserdata(L, sizeof(t_pdlua_gfx*));
+        *ud = &obj->gfx;
         luaL_setmetatable(L, "GraphicsContext");
 
 #ifndef PURR_DATA
