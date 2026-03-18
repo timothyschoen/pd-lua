@@ -75,13 +75,4 @@ else
 	$(MAKE) -C $(luajit_dir) CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.11
 endif
 
-# Generate binary data headers for compat53 lua files, so we can load them on init
-luas/lua-compat-5.3/compat53/compat53_init.h: luas/lua-compat-5.3/compat53/init.lua
-	xxd -i $< > $@
-luas/lua-compat-5.3/compat53/compat53_module.h: luas/lua-compat-5.3/compat53/module.lua
-	xxd -i $< > $@
-luas/lua-compat-5.3/compat53/compat53_file_mt.h: luas/lua-compat-5.3/compat53/file_mt.lua
-	xxd -i $< > $@
-luas/luajit.$(extension).o: $(compat53_headers)
-
 pdlua.$(extension): $(luajit_lib)

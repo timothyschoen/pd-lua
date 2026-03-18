@@ -4,28 +4,30 @@
 #include "luajit/src/lauxlib.h"
 #include "luajit/src/lualib.h"
 
+#define LUAMOD_API
+
 // Include 5.3 C-API compatibility layer
 #include "lua-compat-5.3/c-api/compat-5.3.h"
 
 // Include 5.3 lua compatibility layer
-#include "lua-compat-5.3/compat53/compat53_init.h"
-#include "lua-compat-5.3/compat53/compat53_module.h"
-#include "lua-compat-5.3/compat53/compat53_file_mt.h"
+#include "lua-compat-headers/compat53_init.h"
+#include "lua-compat-headers/compat53_module.h"
+#include "lua-compat-headers/compat53_file_mt.h"
 
 static void preload_compat53(lua_State *L) {
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "preload");
 
-    luaL_loadbuffer(L, (const char*)luas_lua_compat_5_3_compat53_init_lua,
-                       luas_lua_compat_5_3_compat53_init_lua_len, "compat53");
+    luaL_loadbuffer(L, (const char*)lua_compat_5_3_compat53_init_lua,
+                       lua_compat_5_3_compat53_init_lua_len, "compat53");
     lua_setfield(L, -2, "compat53");
 
-    luaL_loadbuffer(L, (const char*)luas_lua_compat_5_3_compat53_module_lua,
-                       luas_lua_compat_5_3_compat53_module_lua_len, "compat53.module");
+    luaL_loadbuffer(L, (const char*)lua_compat_5_3_compat53_module_lua,
+                       lua_compat_5_3_compat53_module_lua_len, "compat53.module");
     lua_setfield(L, -2, "compat53.module");
 
-    luaL_loadbuffer(L, (const char*)luas_lua_compat_5_3_compat53_file_mt_lua,
-                       luas_lua_compat_5_3_compat53_file_mt_lua_len, "compat53.file_mt");
+    luaL_loadbuffer(L, (const char*)lua_compat_5_3_compat53_file_mt_lua,
+                       lua_compat_5_3_compat53_file_mt_lua_len, "compat53.file_mt");
     lua_setfield(L, -2, "compat53.file_mt");
 
     lua_pop(L, 2);
