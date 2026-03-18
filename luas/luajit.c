@@ -35,13 +35,6 @@ static void preload_compat53(lua_State *L) {
     lua_call(L, 1, 0);
 }
 
-#ifdef PDINSTANCE
-#include <pthread.h>
-pthread_mutex_t lua_global_lock = PTHREAD_MUTEX_INITIALIZER;
-#define lua_lock(L)    pthread_mutex_lock(&lua_global_lock)
-#define lua_unlock(L)  pthread_mutex_unlock(&lua_global_lock)
-#endif
-
 #define LUA_FILE_EXTENSION ".pd_luajit"
 #define LUA_USE_JIT 1
 

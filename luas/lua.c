@@ -155,13 +155,6 @@
 #define l_likely(x)	luai_likely(x)
 #define l_unlikely(x)	luai_unlikely(x)
 
-#ifdef PDINSTANCE
-#include <pthread.h>
-pthread_mutex_t lua_global_lock = PTHREAD_MUTEX_INITIALIZER;
-#define lua_lock(L)    pthread_mutex_lock(&lua_global_lock)
-#define lua_unlock(L)  pthread_mutex_unlock(&lua_global_lock)
-#endif
-
 #include "lua/lua.h"
 #include "lua/lauxlib.h"
 #include "lua/lualib.h"

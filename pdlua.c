@@ -127,73 +127,75 @@ static t_signal_setmultiout g_signal_setmultiout;
 #ifdef PDINSTANCE
 
 typedef struct _lua_Instance {
-    void* pd_instance;
-    lua_State* state;
+    void*              pd_instance;
+    lua_State*         state;
     struct _lua_Instance* next;
 } lua_Instance;
 
-lua_Instance* lua_threads = NULL;
+static lua_Instance* lua_instances = NULL;
 
-static lua_State* __L()
+static lua_State* __L(void)
 {
-    lua_Instance* iter = lua_threads;
-    while(iter)
-    {
-        if(iter->pd_instance == pd_this)
-        {
+    lua_Instance* iter = lua_instances;
+    while (iter) {
+        if (iter->pd_instance == pd_this)
             return iter->state;
-        }
         iter = iter->next;
     }
-
-    return NULL; // should never happen
+    return NULL; /* should never happen */
 }
 
-static void initialize_lua_state()
+static lua_State* create_lua_state(void)
 {
-    if(!lua_threads)
-    {
-        lua_threads = t_getbytes(sizeof(lua_Instance));
-        lua_threads->pd_instance = pd_this;
-        lua_threads->state = luaL_newstate();
-        lua_threads->next = NULL;
-        return;
+    /* Always a fresh, fully independent state – never lua_newthread. */
+    lua_State* L = luaL_newstate();
+    if (!L) return NULL;
+
+    lua_Instance* node = t_getbytes(sizeof(lua_Instance));
+    node->pd_instance  = pd_this;
+    node->state        = L;
+    node->next         = NULL;
+
+    if (!lua_instances) {
+        lua_instances = node;
+    } else {
+        lua_Instance* tail = lua_instances;
+        while (tail->next) tail = tail->next;
+        tail->next = node;
     }
-
-    lua_Instance* iter = lua_threads;
-    while(iter->next)
-    {
-        iter = iter->next;
-    }
-
-    lua_checkstack(lua_threads->state, 1);
-
-    iter->next = t_getbytes(sizeof(lua_Instance));
-    iter->next->pd_instance = pd_this;
-    iter->next->state = lua_newthread(lua_threads->state);
-    iter->next->next = NULL;
-
-    // TODO: lua state will leak, we should clean it up somewhere
-    //axluaL_ref(lua_threads->state, LUA_REGISTRYINDEX);
+    return L;
 }
 
-#else
+static void destroy_lua_state(void)
+{
+    /* Walk the list and remove the node for the current pd instance. */
+    lua_Instance** pp = &lua_instances;
+    while (*pp) {
+        if ((*pp)->pd_instance == pd_this) {
+            lua_Instance* dead = *pp;
+            *pp = dead->next;
+            lua_close(dead->state);
+            t_freebytes(dead, sizeof(lua_Instance));
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
+#else /* !PDINSTANCE – single global state */
 
 static lua_State* __lua_state = NULL;
 
-static lua_State* __L()
+static lua_State* __L(void) { return __lua_state; }
+
+static lua_State* create_lua_state(void)
 {
+    if (!__lua_state)
+        __lua_state = luaL_newstate();
     return __lua_state;
 }
 
-static void initialize_lua_state()
-{
-    if (!__lua_state) {
-        __lua_state = luaL_newstate();
-    }
-}
-
-#endif
+#endif /* PDINSTANCE */
 
 // class_new class names need to use gensym of the global pure-data instance
 static t_symbol* global_gensym(const char* s)
@@ -3152,13 +3154,90 @@ static int pdlua_loader_pathwise
 __declspec(dllexport)
 #endif
 
+static int init_pdlua_environment(lua_State* L, const char* datadir)
+{
+    char pd_lua_path[MAXPDSTRING];
+    t_pdlua_readerdata reader;
+    int fd, result;
+
+    luaL_openlibs(L);
+    PDLUA_DEBUG("pdlua luaL_openlibs done", 0);
+
+    pdlua_init(L);
+    PDLUA_DEBUG("pdlua pdlua_init done", 0);
+
+#if LUA_USE_JIT
+    preload_compat53(L);
+#endif
+
+    snprintf(pd_lua_path, MAXPDSTRING-1, "%s/pd.lua", datadir);
+    PDLUA_DEBUG("pd_lua_path %s", pd_lua_path);
+
+    fd = open(pd_lua_path, O_RDONLY);
+    PDLUA_DEBUG("pdlua canvas_open done fd = %d", fd);
+    PDLUA_DEBUG("pdlua_setup: stack top %d", lua_gettop(L));
+
+    if (fd < 0) {
+        pd_error(NULL, "lua: error loading `pd.lua': open() failed");
+        pd_error(NULL, "lua: loader will not be registered!");
+        return 0;
+    }
+
+    reader.fd = fd;
+    pdlua_packagepath(L, datadir); /* so pdx.lua can be found */
+
+#if LUA_VERSION_NUM < 502
+    result = lua_load(L, pdlua_reader, &reader, "pd.lua");
+#else
+    result = lua_load(L, pdlua_reader, &reader, "pd.lua", NULL);
+#endif
+    PDLUA_DEBUG("pdlua lua_load returned %d", result);
+
+    if (result == 0) {
+        result = lua_pcall(L, 0, 0, 0);
+        PDLUA_DEBUG("pdlua lua_pcall returned %d", result);
+    }
+
+    close(fd);
+
+    if (result != 0) {
+        mylua_error(L, NULL, NULL);
+        pd_error(NULL, "lua: loader will not be registered!");
+        pd_error(NULL, "lua: (is `pd.lua' in Pd's path list?)");
+        return 0;
+    }
+
+    pdlua_gfx_setup(L);
+    pdlua_properties_setup(L);
+
+#if LUA_USE_JIT
+    lua_getglobal(L, "jit");
+    lua_getfield(L, -1, "on");
+    lua_call(L, 0, 0);
+
+    lua_getglobal(L, "jit");
+    lua_getfield(L, -1, "opt");
+    lua_getfield(L, -1, "start");
+    lua_pushstring(L, "hotloop=1");
+    lua_call(L, 1, 0);
+#endif
+
+    return 1; /* success */
+}
 
 void pdlua_instance_setup()
 {
 #if PDINSTANCE
-    initialize_lua_state();
+    lua_State* L = create_lua_state();
+    if (!L) {
+        pd_error(NULL, "lua: luaL_newstate() failed");
+        return;
+    }
+    PDLUA_DEBUG("pdlua lua_open done L = %p", L);
+    init_pdlua_environment(L, pdlua_datadir);
 #endif
 }
+
 
 #ifdef PLUGDATA
 void pdlua_setup(const char *datadir, char *versbuf, int versbuf_length, void(*register_class_callback)(const char*))
@@ -3166,10 +3245,6 @@ void pdlua_setup(const char *datadir, char *versbuf, int versbuf_length, void(*r
 void pdlua_setup(void)
 #endif
 {
-    char                pd_lua_path[MAXPDSTRING];
-    t_pdlua_readerdata  reader;
-    int                 fd;
-    int                 result;
     char                pdluaver[MAXPDSTRING];
     char                compiled[MAXPDSTRING];
     char                luaversionStr[MAXPDSTRING];
@@ -3264,18 +3339,6 @@ void pdlua_setup(void)
         return;
     }
 
-    initialize_lua_state();
-
-    PDLUA_DEBUG("pdlua lua_open done L = %p", __L());
-    luaL_openlibs(__L());
-    PDLUA_DEBUG("pdlua luaL_openlibs done", 0);
-    pdlua_init(__L());
-    PDLUA_DEBUG("pdlua pdlua_init done", 0);
-
-#if LUA_USE_JIT
-    preload_compat53(__L());
-#endif
-
     /* "pd.lua" is the Lua part of pdlua, want to keep the C part minimal */
     /* canvas_open can't find pd.lua unless we give the path to pd beforehand like pd -path /usr/lib/extra/pdlua */
     /* To avoid this we can use c_externdir from m_imp.h, struct _class: t_symbol *c_externdir; */
@@ -3297,63 +3360,28 @@ void pdlua_setup(void)
     if (!getcwd(pdlua_cwd, MAXPDSTRING))
         // if we can't get the cwd, this is the best that we can do
         strcpy(pdlua_cwd, ".");
-    snprintf(pd_lua_path, MAXPDSTRING-1, "%s/pd.lua", pdlua_datadir); /* the full path to pd.lua */
-    PDLUA_DEBUG("pd_lua_path %s", pd_lua_path);
-    fd = open(pd_lua_path, O_RDONLY);
-/*    fd = canvas_open(canvas_getcurrent(), "pd", ".lua", buf, &ptr, MAXPDSTRING, 1);  looks all over and rarely succeeds */
-    PDLUA_DEBUG ("pd.lua loaded from %s", pd_lua_path);
-    PDLUA_DEBUG("pdlua canvas_open done fd = %d", fd);
-    PDLUA_DEBUG("pdlua_setup: stack top %d", lua_gettop(__L()));
-    if (fd >= 0)
-    { /* pd.lua was opened */
-        reader.fd = fd;
-        // We need to set up Lua's package.path here so that pdx.lua can be
-        // found (and possibly other pre-loaded extension modules in the
-        // future). Note that we can't just use pdlua_setrequirepath() here
-        // because it calls pd._setrequirepath in pd.lua which isn't loaded
-        // yet at this point.
-        pdlua_packagepath(__L(), pdlua_datadir);
-#if LUA_VERSION_NUM	< 502
-        result = lua_load(__L(), pdlua_reader, &reader, "pd.lua");
-#else // 5.2 style
-        result = lua_load(__L(), pdlua_reader, &reader, "pd.lua", NULL); // mode bt for binary or text
-#endif // LUA_VERSION_NUM	< 502
-        PDLUA_DEBUG ("pdlua lua_load returned %d", result);
-        if (0 == result)
-        {
-            result = lua_pcall(__L(), 0, 0, 0);
-            PDLUA_DEBUG ("pdlua lua_pcall returned %d", result);
-        }
 
-        if (0 != result)
-        {
-            mylua_error(__L(), NULL, NULL);
-            pd_error(NULL, "lua: loader will not be registered!");
-            pd_error(NULL, "lua: (is `pd.lua' in Pd's path list?)");
-        }
-        else
-        {
-            int maj=0,min=0,bug=0;
-            sys_getversion(&maj,&min,&bug);
-            if((maj==0) && (min<47))
-                /* before Pd<0.47, the loaders had to iterate over each path themselves */
-                sys_register_loader((loader_t)pdlua_loader_legacy);
-            else
-                /* since Pd>=0.47, Pd tries the loaders for each path */
-                sys_register_loader((loader_t)pdlua_loader_pathwise);
-        }
-        close(fd);
+    lua_State* L = create_lua_state();
+    if (!L) {
+        pd_error(NULL, "lua: luaL_newstate() failed");
+        return;
     }
-    else
+    PDLUA_DEBUG("pdlua lua_open done L = %p", L);
+
+    if (!init_pdlua_environment(L, pdlua_datadir))
+        return;
     {
-        pd_error(NULL, "lua: error loading `pd.lua': canvas_open() failed");
-        pd_error(NULL, "lua: loader will not be registered!");
+        int maj = 0, min = 0, bug = 0;
+        sys_getversion(&maj, &min, &bug);
+        if (maj == 0 && min < 47)
+            sys_register_loader((loader_t)pdlua_loader_legacy);
+        else
+            sys_register_loader((loader_t)pdlua_loader_pathwise);
     }
 
-    pdlua_gfx_setup(__L());
-    pdlua_properties_setup(__L());
+    PDLUA_DEBUG("pdlua_setup: end. stack top %d", lua_gettop(L));
 
-    PDLUA_DEBUG("pdlua_setup: end. stack top %d", lua_gettop(__L()));
+    /* ── nw.js support ── */
 #ifndef PLUGDATA
     /* nw.js support. */
 #ifdef WIN32
@@ -3372,17 +3400,7 @@ void pdlua_setup(void)
 #else
     void pdluajit_setup();
     pdluajit_setup();
-#endif
-#else
-    lua_getglobal(__L(), "jit");
-    lua_getfield(__L(), -1, "on");
-    lua_call(__L(), 0, 0);
-
-    lua_getglobal(__L(), "jit");
-    lua_getfield(__L(), -1, "opt");
-    lua_getfield(__L(), -1, "start");
-    lua_pushstring(__L(), "hotloop=1");
-    lua_call(__L(), 1, 0);
+# endif
 #endif
 }
 
