@@ -369,11 +369,12 @@ function pd.Class:register(name)
   self._class, self._class_gfx = pd._register(name)  -- register new class
   self._name = name
   self._loadpath = fullpath
+  local suffix = jit and ".pd_luajit" or ".pd_lua"
   if name == "pdlua" then
     self._scriptname = "pd.lua"
   else
-    self._scriptname = name .. ".pd_lua"
-  end -- mrpeach 20111027
+    self._scriptname = name .. suffix
+  end-- mrpeach 20111027
   return self                       -- return new
 end
 
