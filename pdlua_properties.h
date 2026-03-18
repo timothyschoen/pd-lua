@@ -690,6 +690,8 @@ static int pdlua_properties_addcolor(lua_State *L) {
     char colorboxid[MAXPDSTRING];
     char pdsend[MAXPDSTRING];
 
+    pdlua->properties.property_count++;
+
     snprintf(container, MAXPDSTRING, "%s.color%d",
              pdlua->properties.current_frame->s_name,
              pdlua->properties.property_count);
@@ -1065,5 +1067,3 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol *UNUSED(s), int argc,
 }
 
 #endif
-
-
