@@ -89,6 +89,13 @@ typedef struct _pdlua_gfx
 #else
     int current_layer;
     void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*); // Callback to perform drawing in plugdata
+    void(*pdlua_gfx_mouse_down)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_up)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_move)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_drag)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_enter)(void *x, int xpos, int ypos);
+    void(*pdlua_gfx_mouse_exit)(void *x, int xpos, int ypos);
+    void(*pdlua_gfx_repaint)(void* o, int firsttime);
 #endif
 } t_pdlua_gfx;
 

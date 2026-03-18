@@ -1609,6 +1609,14 @@ static int pdlua_object_new(lua_State *L)
 #else
                 // NULL until plugdata overrides them with something useful
                 o->gfx.plugdata_draw_callback = NULL;
+                
+                o->gfx.pdlua_gfx_repaint = pdlua_gfx_repaint;
+                o->gfx.pdlua_gfx_mouse_down = pdlua_gfx_mouse_down;
+                o->gfx.pdlua_gfx_mouse_up = pdlua_gfx_mouse_up;
+                o->gfx.pdlua_gfx_mouse_drag = pdlua_gfx_mouse_drag;
+                o->gfx.pdlua_gfx_mouse_move = pdlua_gfx_mouse_move;
+                o->gfx.pdlua_gfx_mouse_enter = pdlua_gfx_mouse_enter;
+                o->gfx.pdlua_gfx_mouse_exit = pdlua_gfx_mouse_exit;
 #endif
 
                 lua_pushlightuserdata(L, o);
