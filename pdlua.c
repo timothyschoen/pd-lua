@@ -46,6 +46,11 @@
     #include <sys/fcntl.h> // for open
     #include <unistd.h>
 #endif
+
+#ifdef PDINSTANCE
+#include <pthread.h>
+#endif
+
 #include "pdlua.h"
 
 #include "s_stuff.h" // for sys_register_loader()
@@ -125,6 +130,47 @@ static t_signal_setmultiout g_signal_setmultiout;
 #define trytoopenone(dir, name, ...) open_via_path(sys_isabsolutepath(name) ? "" : dir, name, __VA_ARGS__)
 
 #ifdef PDINSTANCE
+
+static int pdlua_loader_wrappath(int fd, const char *name, const char *dirbuf);
+
+typedef struct pdlua_script {
+    char dirbuf[MAXPDSTRING];
+    char name[MAXPDSTRING];   // full name as passed to wrappath (may have path prefix)
+    struct pdlua_script *next;
+} pdlua_script_t;
+
+static pdlua_script_t *pdlua_loaded_scripts = NULL;
+
+static pthread_mutex_t pdlua_scripts_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void pdlua_record_script(const char *name, const char *dirbuf) {
+    pdlua_script_t *s = getbytes(sizeof(*s));
+    strncpy(s->dirbuf, dirbuf, MAXPDSTRING-1);
+    strncpy(s->name,   name,   MAXPDSTRING-1);
+    pthread_mutex_lock(&pdlua_scripts_mutex);
+    s->next = pdlua_loaded_scripts;
+    pdlua_loaded_scripts = s;
+    pthread_mutex_unlock(&pdlua_scripts_mutex);
+}
+
+static pdlua_script_t* pdlua_find_script(t_symbol *s)
+{
+    pdlua_script_t *found = NULL;
+    pthread_mutex_lock(&pdlua_scripts_mutex);
+    for (pdlua_script_t *s2 = pdlua_loaded_scripts; s2; s2 = s2->next)
+    {
+        const char *basenamep = strrchr(s2->name, '/');
+        basenamep = basenamep ? basenamep + 1 : s2->name;
+        if (strcmp(basenamep, s->s_name) == 0)
+        {
+            found = s2;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&pdlua_scripts_mutex);
+    return found;
+}
+
 
 typedef struct _lua_Instance {
     void*              pd_instance;
@@ -850,6 +896,45 @@ static t_pdlua *pdlua_new
         }
         else
         {
+#ifdef PDINSTANCE
+            // Search recorded scripts for a matching basename
+            pdlua_script_t *found = pdlua_find_script(s);
+            if (found)
+            {
+                const char *basenamep = strrchr(found->name, '/');
+                basenamep = basenamep ? basenamep + 1 : found->name;
+                char filepath[MAXPDSTRING];
+                snprintf(filepath, MAXPDSTRING-1, "%s/%s%s", found->dirbuf, basenamep, LUA_FILE_EXTENSION);
+
+                int fd = sys_open(filepath, O_RDONLY);
+                if (fd >= 0)
+                {
+                    pdlua_loader_wrappath(fd, found->name, found->dirbuf);
+                    // Retry constructor
+                    lua_getglobal(__L(), "pd");
+                    lua_getfield(__L(), -1, "_constructor");
+                    lua_pushstring(__L(), s->s_name);
+                    pdlua_pushatomtable(argc, argv);
+                    if (lua_pcall(__L(), 2, 1, 0))
+                    {
+                        mylua_error(__L(), NULL, "constructor");
+                        lua_pop(__L(), 1);
+                        return NULL;
+                    }
+                    if (lua_islightuserdata(__L(), -1))
+                    {
+                        object = lua_touserdata(__L(), -1);
+                        lua_pop(__L(), 2);
+                        return object;
+                    }
+                    lua_pop(__L(), 2);
+                }
+                else
+                {
+                    pd_error(NULL, "pdlua: can't reopen %s for new instance", filepath);
+                }
+            }
+#endif
             lua_pop(__L(), 2);/* pop the userdata and the global "pd" */
             PDLUA_DEBUG("pdlua_new: done FALSE lua_islightuserdata(L, -1)", 0);
             return NULL;
@@ -3074,6 +3159,9 @@ static int pdlua_loader_wrappath
     }
     lua_pop(__L(), 1);
     sys_close(fd);
+
+    if (result)
+        pdlua_record_script(name, dirbuf);
   }
   return result;
 }
@@ -3235,6 +3323,10 @@ void pdlua_instance_setup()
     }
     PDLUA_DEBUG("pdlua lua_open done L = %p", L);
     init_pdlua_environment(L, pdlua_datadir);
+#endif
+#ifndef LUA_USE_JIT
+    void pdluajit_instance_setup();
+    pdluajit_instance_setup();
 #endif
 }
 
