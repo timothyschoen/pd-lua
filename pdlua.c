@@ -1510,7 +1510,7 @@ static int pdlua_class_new(lua_State *L)
 #pragma GCC diagnostic ignored "-Wcast-function-type"
     c = class_new(global_gensym((char *) name), (t_newmethod)pdlua_new,
         (t_method) pdlua_free, sizeof(t_pdlua), CLASS_NOINLET | CLASS_MULTICHANNEL, A_GIMME, 0);
-    if (strcmp(name, "pdlua") && strcmp(name, "pdluax")) {
+    if (strcmp(name, "pdlua") && strcmp(name, "pdluax") && strcmp(name, "pdluajit") && strcmp(name, "pdluaxjit")) {
         // Shadow class for graphics objects. This is an exact clone of the
         // regular (non-gui) class, except that it has a different
         // widgetbehavior. We only need this for the regular Lua objects, the
@@ -1609,7 +1609,7 @@ static int pdlua_object_new(lua_State *L)
 #else
                 // NULL until plugdata overrides them with something useful
                 o->gfx.plugdata_draw_callback = NULL;
-                
+
                 o->gfx.pdlua_gfx_repaint = pdlua_gfx_repaint;
                 o->gfx.pdlua_gfx_mouse_down = pdlua_gfx_mouse_down;
                 o->gfx.pdlua_gfx_mouse_up = pdlua_gfx_mouse_up;
