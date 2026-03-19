@@ -47,10 +47,6 @@
     #include <unistd.h>
 #endif
 
-#ifdef PDINSTANCE
-#include <pthread.h>
-#endif
-
 #include "pdlua.h"
 
 #include "s_stuff.h" // for sys_register_loader()
@@ -131,46 +127,7 @@ static t_signal_setmultiout g_signal_setmultiout;
 
 #ifdef PDINSTANCE
 
-static int pdlua_loader_wrappath(int fd, const char *name, const char *dirbuf);
-
-typedef struct pdlua_script {
-    char dirbuf[MAXPDSTRING];
-    char name[MAXPDSTRING];   // full name as passed to wrappath (may have path prefix)
-    struct pdlua_script *next;
-} pdlua_script_t;
-
-static pdlua_script_t *pdlua_loaded_scripts = NULL;
-
-static pthread_mutex_t pdlua_scripts_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static void pdlua_record_script(const char *name, const char *dirbuf) {
-    pdlua_script_t *s = getbytes(sizeof(*s));
-    strncpy(s->dirbuf, dirbuf, MAXPDSTRING-1);
-    strncpy(s->name,   name,   MAXPDSTRING-1);
-    pthread_mutex_lock(&pdlua_scripts_mutex);
-    s->next = pdlua_loaded_scripts;
-    pdlua_loaded_scripts = s;
-    pthread_mutex_unlock(&pdlua_scripts_mutex);
-}
-
-static pdlua_script_t* pdlua_find_script(t_symbol *s)
-{
-    pdlua_script_t *found = NULL;
-    pthread_mutex_lock(&pdlua_scripts_mutex);
-    for (pdlua_script_t *s2 = pdlua_loaded_scripts; s2; s2 = s2->next)
-    {
-        const char *basenamep = strrchr(s2->name, '/');
-        basenamep = basenamep ? basenamep + 1 : s2->name;
-        if (strcmp(basenamep, s->s_name) == 0)
-        {
-            found = s2;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&pdlua_scripts_mutex);
-    return found;
-}
-
+static int pdlua_loader_pathwise(t_canvas *canvas, const char  *objectname, const char  *path);
 
 typedef struct _lua_Instance {
     void*              pd_instance;
@@ -188,12 +145,11 @@ static lua_State* __L(void)
             return iter->state;
         iter = iter->next;
     }
-    return NULL; /* should never happen */
+    return NULL;
 }
 
 static lua_State* create_lua_state(void)
 {
-    /* Always a fresh, fully independent state – never lua_newthread. */
     lua_State* L = luaL_newstate();
     if (!L) return NULL;
 
@@ -214,7 +170,6 @@ static lua_State* create_lua_state(void)
 
 static void destroy_lua_state(void)
 {
-    /* Walk the list and remove the node for the current pd instance. */
     lua_Instance** pp = &lua_instances;
     while (*pp) {
         if ((*pp)->pd_instance == pd_this) {
@@ -228,7 +183,7 @@ static void destroy_lua_state(void)
     }
 }
 
-#else /* !PDINSTANCE – single global state */
+#else
 
 static lua_State* __lua_state = NULL;
 
@@ -241,7 +196,7 @@ static lua_State* create_lua_state(void)
     return __lua_state;
 }
 
-#endif /* PDINSTANCE */
+#endif
 
 // class_new class names need to use gensym of the global pure-data instance
 static t_symbol* global_gensym(const char* s)
@@ -896,47 +851,31 @@ static t_pdlua *pdlua_new
         }
         else
         {
-#ifdef PDINSTANCE
-            // Search recorded scripts for a matching basename
-            pdlua_script_t *found = pdlua_find_script(s);
-            if (found)
-            {
-                const char *basenamep = strrchr(found->name, '/');
-                basenamep = basenamep ? basenamep + 1 : found->name;
-                char filepath[MAXPDSTRING];
-                snprintf(filepath, MAXPDSTRING-1, "%s/%s%s", found->dirbuf, basenamep, LUA_FILE_EXTENSION);
-
-                int fd = sys_open(filepath, O_RDONLY);
-                if (fd >= 0)
-                {
-                    pdlua_loader_wrappath(fd, found->name, found->dirbuf);
-                    // Retry constructor
-                    lua_getglobal(__L(), "pd");
-                    lua_getfield(__L(), -1, "_constructor");
-                    lua_pushstring(__L(), s->s_name);
-                    pdlua_pushatomtable(argc, argv);
-                    if (lua_pcall(__L(), 2, 1, 0))
-                    {
-                        mylua_error(__L(), NULL, "constructor");
-                        lua_pop(__L(), 1);
-                        return NULL;
-                    }
-                    if (lua_islightuserdata(__L(), -1))
-                    {
-                        object = lua_touserdata(__L(), -1);
-                        lua_pop(__L(), 2);
-                        return object;
-                    }
-                    lua_pop(__L(), 2);
-                }
-                else
-                {
-                    pd_error(NULL, "pdlua: can't reopen %s for new instance", filepath);
-                }
-            }
-#endif
             lua_pop(__L(), 2);/* pop the userdata and the global "pd" */
             PDLUA_DEBUG("pdlua_new: done FALSE lua_islightuserdata(L, -1)", 0);
+#ifdef PDINSTANCE
+            // In multi-instance mode, it's possible that this particular instance has not loaded the lua file yet, so if we fail to construct,
+            // we try to look for the lua file again
+            pdlua_loader_pathwise(canvas_getcurrent(), s->s_name,  canvas_getcurrentdir()->s_name);
+
+            lua_getglobal(__L(), "pd");
+            lua_getfield(__L(), -1, "_constructor");
+            lua_pushstring(__L(), s->s_name);
+            pdlua_pushatomtable(argc, argv);
+            if (lua_pcall(__L(), 2, 1, 0))
+            {
+                mylua_error(__L(), NULL, "constructor");
+                lua_pop(__L(), 1);
+                return NULL;
+            }
+            if (lua_islightuserdata(__L(), -1))
+            {
+                object = lua_touserdata(__L(), -1);
+                lua_pop(__L(), 2);
+                return object;
+            }
+            lua_pop(__L(), 2);
+#endif
             return NULL;
         }
     }
@@ -3159,11 +3098,6 @@ static int pdlua_loader_wrappath
     }
     lua_pop(__L(), 1);
     sys_close(fd);
-
-#ifdef PDINSTANCE
-    if (result)
-        pdlua_record_script(name, dirbuf);
-#endif
   }
   return result;
 }
@@ -3377,13 +3311,11 @@ void pdlua_setup(void)
 #if PLUGDATA
     plugdata_register_class = register_class_callback;
 
-    snprintf(versbuf, versbuf_length-1,
-#ifdef ELSE
-             "pdlua %s ELSE (lua %d.%d)",
+#if LUA_USE_JIT
+    snprintf(versbuf, versbuf_length-1, " (luajit %d.%d)", lvm, lvl);
 #else
-             "pdlua %s (lua %d.%d)",
+    snprintf(versbuf, versbuf_length-1, "pdlua %s (lua %d.%d)", pdlua_version, lvm, lvl);
 #endif
-             pdlua_version, lvm, lvl);
 #endif
 // post version and other information
     post(pdluaver);
@@ -3487,7 +3419,7 @@ void pdlua_setup(void)
 #ifndef LUA_USE_JIT
 #ifdef PLUGDATA
     void pdluajit_setup(const char *datadir, char *versbuf, int versbuf_length, void(*register_class_callback)(const char*));
-    pdluajit_setup(datadir, versbuf, versbuf_length, register_class_callback);
+    pdluajit_setup(datadir, versbuf + strlen(versbuf), versbuf_length - strlen(versbuf), register_class_callback);
 #else
     void pdluajit_setup();
     pdluajit_setup();
