@@ -3160,8 +3160,10 @@ static int pdlua_loader_wrappath
     lua_pop(__L(), 1);
     sys_close(fd);
 
+#ifdef PDINSTANCE
     if (result)
         pdlua_record_script(name, dirbuf);
+#endif
   }
   return result;
 }

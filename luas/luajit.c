@@ -58,4 +58,8 @@ static void preload_compat53(lua_State *L) {
 #define pdlua_setup pdluajit_setup
 #define pdlua_datadir pdluajit_datadir
 
+#ifdef PLUGDATA
+#define plugdata_register_class plugdata_register_class_jit
+#endif
+
 #include "../pdlua.c"
