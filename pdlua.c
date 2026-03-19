@@ -3239,11 +3239,6 @@ static int pdlua_loader_pathwise
 #define xstr(s) str(s)
 #define str(s) #s
 
-/** Start the Lua runtime and register our loader hook. */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-
 static int init_pdlua_environment(lua_State* L, const char* datadir)
 {
     char pd_lua_path[MAXPDSTRING];
@@ -3332,7 +3327,9 @@ void pdlua_instance_setup()
 #endif
 }
 
-
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
 #ifdef PLUGDATA
 void pdlua_setup(const char *datadir, char *versbuf, int versbuf_length, void(*register_class_callback)(const char*))
 #else
