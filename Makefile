@@ -39,8 +39,8 @@ luaflags += -DLUA_USE_WINDOWS
 endef
 endif
 
-luajit_dir = ./luas/luajit
-luajit_lib = $(luajit_dir)/src/libluajit.a
+luajit_dir = ./luas/luajit/src
+luajit_lib = $(luajit_dir)/libluajit.a
 
 cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)"
 ifdef PD_MULTICHANNEL
@@ -69,8 +69,7 @@ compat53_headers = \
 
 $(luajit_lib):
 ifeq ($(system), Windows)
-	$(MAKE) -C $(luajit_dir) SHELL=cmd
-	mv $(luajit_dir)/src/libluajit-5.1.dll.a $(luajit_lib)
+	$(MAKE) -C $(luajit_dir) SHELL=cmd BUILDMODE=static
 else
 	$(MAKE) -C $(luajit_dir) CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.11
 endif
