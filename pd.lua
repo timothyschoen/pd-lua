@@ -369,11 +369,12 @@ function pd.Class:register(name)
   self._class, self._class_gfx = pd._register(name)  -- register new class
   self._name = name
   self._loadpath = fullpath
+  local suffix = jit and ".pd_luajit" or ".pd_lua"
   if name == "pdlua" then
     self._scriptname = "pd.lua"
   else
-    self._scriptname = name .. ".pd_lua"
-  end -- mrpeach 20111027
+    self._scriptname = name .. suffix
+  end-- mrpeach 20111027
   return self                       -- return new
 end
 
@@ -595,7 +596,7 @@ function pd.Class:get_class() -- accessor for t_class*
   return pd._get_class(self) or nil
 end
 
-local lua = pd.Class:new():register("pdlua")  -- global controls (the [pdlua] object only)
+local lua = pd.Class:new():register(jit and "pdluajit" or "pdlua")  -- global controls (the [pdlua] object only)
 
 function lua:initialize(sel, atoms)
   self.inlets = 1
@@ -607,8 +608,7 @@ function lua:in_1_load(atoms)  -- execute a script
   self:dofile(atoms[1])
 end
 
-
-local luax = pd.Class:new():register("pdluax")  -- classless lua externals (like [pdluax foo])
+local luax = pd.Class:new():register(jit and "pdluaxjit" or "pdluax")  -- classless lua externals (like [pdluax foo])
 
 function luax:initialize(sel, atoms)          -- motivation: pd-list 2007-09-23
   if not atoms[1] then
