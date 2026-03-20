@@ -478,6 +478,16 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
         "bind %s <Return> {%s}",
         buttonOkId, okCommand);
     pdgui_vmess(0, "r", okReturnBind);
+
+#if __APPLE__
+    char focusbind[MAXPDSTRING * 2];
+    snprintf(focusbind, MAXPDSTRING * 2,
+        "bind %s <FocusIn> {if {[focus] ne \"%s\"} {catch {%s configure -default normal}}}",
+        p->properties_receiver->s_name,
+        buttonOkId,
+        buttonOkId);
+    pdgui_vmess(0, "r", focusbind);
+#endif
 #else
 
     t_symbol *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, x);
