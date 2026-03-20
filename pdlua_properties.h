@@ -240,7 +240,6 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), i
 
     lua_pushlightuserdata(__L(), o);
     lua_pushstring(__L(), atom_getsymbol(argv + 1)->s_name);
-    lua_newtable(__L());
 
     const char *guitype = atom_getsymbol(argv)->s_name;
     if (strcmp(guitype, "colorpicker") == 0)
@@ -270,7 +269,6 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), i
             lua_rawseti(__L(), -2, 2);
             lua_pushinteger(__L(), b);
             lua_rawseti(__L(), -2, 3);
-            lua_rawseti(__L(), -2, 1);
         } else {
             pd_error(o, "Invalid color format in sscanf");
             return;
@@ -281,19 +279,17 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), i
             if (argv[i].a_type == A_FLOAT)
             {
                 lua_pushnumber(__L(), atom_getfloat(argv + i));
-                lua_rawseti(__L(), -2, i - 1); // Store at index (1-based in Lua)
             }
             else if (argv[i].a_type == A_SYMBOL)
             {
                 lua_pushstring(__L(), atom_getsymbol(argv + i)->s_name);
-                lua_rawseti(__L(), -2, i - 1);
             }
         }
     }
 
     if (lua_pcall(__L(), 3, 0, 0))
     {
-        mylua_error(__L(), o, "_set_properties"); // Handle error
+        mylua_error(__L(), o, "_set_properties");
         return;
     }
 }
@@ -995,7 +991,6 @@ static void pdlua_properties_apply(t_pdlua *o)
 
         lua_pushlightuserdata(L, o);
         lua_pushstring(L, entry->method);
-        lua_newtable(L);
 
         if (strcmp(entry->guitype, "colorpicker") == 0)
         {
@@ -1007,19 +1002,14 @@ static void pdlua_properties_apply(t_pdlua *o)
                 lua_pushinteger(L, r); lua_rawseti(L, -2, 1);
                 lua_pushinteger(L, g); lua_rawseti(L, -2, 2);
                 lua_pushinteger(L, b); lua_rawseti(L, -2, 3);
-                lua_rawseti(L, -2, 1);
             }
         }
         else
         {
-            for (int j = 0; j < entry->argc; j++)
-            {
-                if (entry->argv[j].a_type == A_FLOAT)
-                    lua_pushnumber(L, atom_getfloat(&entry->argv[j]));
-                else
-                    lua_pushstring(L, atom_getsymbol(&entry->argv[j])->s_name);
-                lua_rawseti(L, -2, j + 1);
-            }
+            if (entry->argv[0].a_type == A_FLOAT)
+                lua_pushnumber(L, atom_getfloat(&entry->argv[0]));
+            else
+                lua_pushstring(L, atom_getsymbol(&entry->argv[0])->s_name);
         }
 
         if (lua_pcall(L, 3, 0, 0))
