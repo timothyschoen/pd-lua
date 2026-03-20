@@ -73,6 +73,13 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: setup MSYS2 MINGW64
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: mingw-w64-x86_64-gcc make
+
     - name: install dependencies for 32-bit
       if: matrix.floatsize == 32
       run: |
@@ -87,6 +94,7 @@ jobs:
         ren Pd-0.56.2 pd-0.56-2
 
     - name: make 32-bit
+      shell: msys2 {0}
       run: make install objectsdir=./build PDDIR=./pd-0.56-2 PDINCLUDEDIR=./pd-0.56-2/src PDBINDIR=./pd-0.56-2/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
 
     - name: upload

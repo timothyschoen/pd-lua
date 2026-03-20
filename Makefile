@@ -69,7 +69,7 @@ compat53_headers = \
 
 $(luajit_lib):
 ifeq ($(system), Windows)
-	$(MAKE) -C $(luajit_dir) SHELL=cmd BUILDMODE=static
+	$(MAKE) -C $(luajit_dir) BUILDMODE=static
 else
 	$(MAKE) -C $(luajit_dir) CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.11
 endif
