@@ -1638,6 +1638,7 @@ static int pdlua_object_new(lua_State *L)
                 o->gfx.mouse_x = 0;
                 o->gfx.mouse_y = 0;
                 o->gfx.mouse_down = 0;
+                o->properties.property_count = 0;
 #else
                 // NULL until plugdata overrides them with something useful
                 o->gfx.plugdata_draw_callback = NULL;
@@ -2108,6 +2109,7 @@ static int pdlua_object_free(lua_State *L)
         if (o)
         {
             pdlua_gfx_free(&o->gfx);
+            pdlua_properties_free(&o->properties);
 
             if(o->in)
             {
@@ -2851,11 +2853,11 @@ static int pdlua_setpropertiesfn(lua_State *L)
     t_pdlua *x = (t_pdlua *)lua_touserdata(L, 1);
     if(x->pdlua_class) {
         class_setpropertiesfn(x->pdlua_class, pdlua_properties);
-        class_addmethod(x->pdlua_class, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
+        class_addmethod(x->pdlua_class, (t_method)pdlua_properties_receiver, gensym("dialog"), A_GIMME, 0);
     }
     if(x->pdlua_class_gfx) {
         class_setpropertiesfn(x->pdlua_class_gfx, pdlua_properties);
-        class_addmethod(x->pdlua_class_gfx, (t_method)pdlua_properties_receiver, gensym("_properties"), A_GIMME, 0);
+        class_addmethod(x->pdlua_class_gfx, (t_method)pdlua_properties_receiver, gensym("dialog"), A_GIMME, 0);
     }
     return 0;
 }

@@ -48,6 +48,17 @@ static void pdlua_properties_setup(lua_State* L)
     luaL_setfuncs(L, properties_methods, 0);
 }
 
+static void pdlua_properties_free(t_pdlua_properties *p)
+{
+#ifdef PURR_DATA
+    if(p->property_count)
+    {
+        free(p->property_method_callbacks);
+        free(p->property_types);
+    }
+#endif
+}
+
 #ifdef PLUGDATA
 #ifdef _MSC_VER
 #define alloca _alloca
@@ -304,6 +315,17 @@ static void pdlua_properties_updaterow(t_pdlua_properties *p)
         p->current_col = 0; // not used for now
     }
 }
+#else
+static inline void purrdata_add_callback(t_pdlua_properties *p, const char *type, const char *method)
+{
+    p->property_method_callbacks = realloc(p->property_method_callbacks, sizeof(t_symbol*) * (p->property_count + 1));
+    p->property_types = realloc(p->property_types, sizeof(t_symbol*) * (p->property_count + 1));
+
+    p->property_method_callbacks[p->property_count] = gensym(method);
+    p->property_types[p->property_count] = gensym(type);
+    p->property_count++;
+}
+
 #endif
 
 static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
@@ -314,6 +336,11 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 
 #ifdef PURR_DATA
     const char *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, (void*)pdlua);
+
+    free(p->property_method_callbacks);
+    free(p->property_types);
+    p->property_count = 0;
+
     gui_start_vmess("gui_external_dialog", "ss", gfx_tag, pdlua->pd.te_g.g_pd->c_name->s_name);
     gui_start_array();
 
@@ -428,7 +455,7 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 
     char okCommand[MAXPDSTRING * 2];
     snprintf(okCommand, MAXPDSTRING * 2,
-        "pdsend \"%s _properties apply\"; destroy .%p",
+        "pdsend \"%s dialog apply\"; destroy .%p",
         p->properties_receiver->s_name, (void *)p);
     pdgui_vmess(0, "ssssssss", "button", buttonOkId,
         "-text", "OK", "-command", okCommand, "-default", okButtonState);
@@ -445,7 +472,7 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
         "  catch {"
         "    if {[focus] eq \"%s\"} {%s} "
         "    else {"
-        "      pdsend \"%s _properties apply\";"
+        "      pdsend \"%s dialog apply\";"
         "      %s configure -default active;"
         "      focus %s"
         "    }"
@@ -461,7 +488,7 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 #else
     char returnbind[MAXPDSTRING * 2];
     snprintf(returnbind, MAXPDSTRING * 2,
-        "bind %s <Return> {catch {pdsend \"%s _properties apply\"; destroy .%p}; break}",
+        "bind %s <Return> {catch {pdsend \"%s dialog apply\"; destroy .%p}; break}",
         p->properties_receiver->s_name,
         p->properties_receiver->s_name,
         (void *)p);
@@ -469,7 +496,7 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 
     char applyCommand[MAXPDSTRING];
     snprintf(applyCommand, MAXPDSTRING,
-        "pdsend \"%s _properties apply\"",
+        "pdsend \"%s dialog apply\"",
         p->properties_receiver->s_name);
     pdgui_vmess(0, "ssssss", "button", buttonApplyId,
         "-text", "Apply", "-command", applyCommand);
@@ -584,7 +611,7 @@ static int pdlua_properties_addcheck(lua_State *L)
     pdgui_vmess(0, "ssi", "set", checkvariable, init_value);
 
     // Build the pdsend command
-    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties checkbox %s $%s]",
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s dialog checkbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, checkvariable);
 
     // Create the checkbox
@@ -600,6 +627,7 @@ static int pdlua_properties_addcheck(lua_State *L)
     snprintf(name, MAXPDSTRING, "%s_%s", text, "_toggle");
     gui_s(name);
     gui_i(init_value);
+    purrdata_add_callback(&pdlua->properties, "check", method);
 #endif
     return 0;
 }
@@ -630,7 +658,7 @@ static int pdlua_properties_addtext(lua_State *L)
     pdgui_vmess(0, "sss", "set", textvariable, init_value);
 
     // Command to send it to pd
-    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties textbox %s $%s]",
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s dialog textbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, textvariable);
 
     // container for button to set and text input
@@ -660,6 +688,7 @@ static int pdlua_properties_addtext(lua_State *L)
     snprintf(name, MAXPDSTRING, "%s_%s", text, "_symbol");
     gui_s(name);
     gui_s(init_value);
+    purrdata_add_callback(&pdlua->properties, "text", method);
 #endif
     return 0;
 }
@@ -735,9 +764,9 @@ static int pdlua_properties_addcolor(lua_State *L) {
     "    if {$c ne \"\"} {\n"
     "        $widget configure -background $c\n"
     "\n"
-    "        pdsend [concat $receiver _properties colorpicker $method $c]\n"
+    "        pdsend [concat $receiver dialog colorpicker $method $c]\n"
 #if __APPLE__
-    "        pdsend [concat $receiver _properties apply]\n"
+    "        pdsend [concat $receiver dialog apply]\n"
 #endif
     "    }\n"
     "}\n");
@@ -758,6 +787,7 @@ static int pdlua_properties_addcolor(lua_State *L) {
     snprintf(name, MAXPDSTRING, "%s_%s", text, "_symbol");
     gui_s(name);
     gui_s(initcolor);
+    purrdata_add_callback(&pdlua->properties, "colorpicker", method);
 #endif
 
     return 0;
@@ -790,7 +820,7 @@ static int pdlua_properties_addint(lua_State *L)
 
     pdgui_vmess(0, "ssi", "set", numvariable, init_value);
 
-    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties numberbox %s $%s]",
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s dialog numberbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, numvariable);
 
     snprintf(container, MAXPDSTRING, "%s.numberbox%d",
@@ -824,6 +854,7 @@ static int pdlua_properties_addint(lua_State *L)
 #else
     gui_s(text);
     gui_i(init_value);
+    purrdata_add_callback(&pdlua->properties, "int", method);
 #endif
 
     return 0;
@@ -856,7 +887,7 @@ static int pdlua_properties_addfloat(lua_State *L)
 
     pdgui_vmess(0, "ssf", "set", numvariable, init_value);
 
-    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties floatbox %s $%s]",
+    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s dialog floatbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, numvariable);
 
     snprintf(container, MAXPDSTRING, "%s.floatbox%d",
@@ -882,7 +913,7 @@ static int pdlua_properties_addfloat(lua_State *L)
         "bind %s <KeyRelease> {"
         "  set v $%s;"
         "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
-        "  pdsend \"%s _properties floatbox %s $%s\""
+        "  pdsend \"%s dialog floatbox %s $%s\""
         "}\n",
         entryid,
         numvariable,
@@ -896,7 +927,7 @@ static int pdlua_properties_addfloat(lua_State *L)
         "bind %s <FocusOut> {"
         "  set v $%s;"
         "  if {$v < %g} {set %s %g} elseif {$v > %g} {set %s %g};"
-        "  pdsend \"%s _properties floatbox %s $%s\""
+        "  pdsend \"%s dialog floatbox %s $%s\""
         "}\n",
         entryid,
         numvariable,
@@ -914,6 +945,7 @@ static int pdlua_properties_addfloat(lua_State *L)
 #else
     gui_s(text);
     gui_f(init_value);
+    purrdata_add_callback(&pdlua->properties, "float", method);
 #endif
 
     return 0;
@@ -956,7 +988,7 @@ static int pdlua_properties_addcombo(lua_State *L)
     }
 
     snprintf(pdsend, MAXPDSTRING,
-             "eval pdsend [concat %s _properties combobox %s [expr {[%%W current] + 1}]]",
+             "eval pdsend [concat %s dialog combobox %s [expr {[%%W current] + 1}]]",
              pdlua->properties.properties_receiver->s_name, method);
 
     char container[MAXPDSTRING];
@@ -965,7 +997,7 @@ static int pdlua_properties_addcombo(lua_State *L)
     pdgui_vmess(0,"ss", "frame", container);
 
     snprintf(textid, MAXPDSTRING, "%s.label", container);
-    pdgui_vmess(0,"ssss", "label", textid, "-text", label);
+    pdgui_vmess(0,"ssss", "label", textid, "-text", text);
 
     snprintf(comboid, MAXPDSTRING,"%s.widget",container);
 
@@ -982,6 +1014,7 @@ static int pdlua_properties_addcombo(lua_State *L)
 #else
     gui_s(text);
     gui_i(init_value);
+    purrdata_add_callback(&pdlua->properties, "combo", method);
 #endif
     free(opts);
 
@@ -1035,6 +1068,9 @@ static void pdlua_properties_apply(t_pdlua *o)
 
 static void pdlua_properties_receiver(t_pdlua *o, t_symbol *IGNORE_UNUSED(s), int argc, t_atom *argv)
 {
+    t_pdlua_properties *p = &o->properties;
+
+#ifndef PURR_DATA
     if (argc < 1) return;
 
     const char *guitype = atom_getsymbol(argv)->s_name;
@@ -1048,7 +1084,6 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol *IGNORE_UNUSED(s), in
 
     if (argc < 2) return;
 
-    t_pdlua_properties *p = &o->properties;
     const char *method = atom_getsymbol(argv + 1)->s_name;
 
     // Overwrite existing entry for the same method so only the latest value is kept
@@ -1080,6 +1115,44 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol *IGNORE_UNUSED(s), in
     {
         entry->argv[entry->argc++] = argv[i];
     }
+#else
+    lua_State *L = __L();
+    for (int i = 0; i < argc; i++)
+    {
+        lua_getglobal(L, "pd");
+        lua_getfield(L, -1, "_set_properties");
+        lua_remove(L, -2);
+
+        lua_pushlightuserdata(L, o);
+        lua_pushstring(L, p->property_method_callbacks[i]->s_name);
+
+        t_atom* value = argv + i;
+        if (strcmp(p->property_types[i]->s_name, "colorpicker") == 0)
+        {
+            const char *hexcolor = atom_getsymbol(value)->s_name;
+            int r, g, b;
+            if (sscanf(hexcolor + 1, "%2x%2x%2x", &r, &g, &b) == 3)
+            {
+                lua_newtable(L);
+                lua_pushinteger(L, r); lua_rawseti(L, -2, 1);
+                lua_pushinteger(L, g); lua_rawseti(L, -2, 2);
+                lua_pushinteger(L, b); lua_rawseti(L, -2, 3);
+            }
+        }
+        else
+        {
+            if (value->a_type == A_FLOAT)
+                lua_pushnumber(L, atom_getfloat(value));
+            else
+                lua_pushstring(L, atom_getsymbol(value)->s_name);
+        }
+
+        if (lua_pcall(L, 3, 0, 0))
+        {
+            mylua_error(L, o, "_set_properties");
+        }
+    }
+#endif
 }
 
 #endif

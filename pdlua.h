@@ -47,6 +47,9 @@ typedef struct _pdlua_properties
     int frame_count;
     int max_col, max_row;
     int current_col, current_row;
+#else
+    t_symbol **property_method_callbacks;
+    t_symbol **property_types;
 #endif
 #else
     void(*plugdata_properties_callback)(void*, t_symbol*, int, t_atom*); // Callback to add properties in plugdata
