@@ -85,6 +85,17 @@ static inline void plugdata_add_property(lua_State* L, const char* sym, const ch
                 atom_idx++;
                 break;
             }
+            case 'b': {
+                t_float val;
+                if (lua_isboolean(L, lua_idx)) {
+                    val = (t_float)lua_toboolean(L, lua_idx);
+                } else {
+                    val = (t_float)luaL_checknumber(L, lua_idx);
+                }
+                SETFLOAT (&atoms[atom_idx], val);
+                atom_idx++;
+                break;
+            }
             case 'F': {
                 SETFLOAT (&atoms[atom_idx], (t_float)luaL_optnumber(L, lua_idx, va_arg(defaults, double)));
                 atom_idx++;
@@ -184,7 +195,7 @@ static int pdlua_properties_newframe(lua_State *L)
 
 static int pdlua_properties_addcheck(lua_State *L)
 {
-    plugdata_add_property(L, "add_check_property", "ssf");
+    plugdata_add_property(L, "add_check_property", "ssb");
     return 0;
 }
 
@@ -547,7 +558,12 @@ static int pdlua_properties_addcheck(lua_State *L)
     t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L, 1);
     const char *text = luaL_checkstring(L, 2);
     const char *method = luaL_checkstring(L, 3);
-    int init_value = luaL_checknumber(L, 4);
+    int init_value;
+    if (lua_isboolean(L, 4)) {
+        init_value = lua_toboolean(L, 4);
+    } else {
+        init_value = (int)luaL_checknumber(L, 4);
+    }
 
 #ifndef PURR_DATA
     if(!pdlua->properties.current_frame)
