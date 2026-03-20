@@ -416,18 +416,9 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
     luaL_getmetatable(L, "PropertiesContext");
     lua_setmetatable(L, -2);
 
-    if (lua_pcall(L, 2, 1, 0))
+    if (lua_pcall(L, 2, 0, 0))
     {
         mylua_error(L, pdlua, "properties");
-        return;
-    }
-
-    // Get the return value (Lua pushes it onto the stack)
-    int result = lua_toboolean(L, -1); // Converts Lua boolean to C int (1 = true, 0 = false)
-    lua_pop(L, 1); // Remove the result from the stack
-    if (!result)
-    {
-        pdgui_vmess(0, "ss", "destroy", p->properties_receiver->s_name);
         return;
     }
 
@@ -550,13 +541,12 @@ static int pdlua_properties_newframe(lua_State *L)
     snprintf(current_frameid, MAXPDSTRING, ".%p.main.frame%d", (void *)&pdlua->properties, pdlua->properties.frame_count);
     pdlua->properties.current_frame = gensym(current_frameid);
 
-    // raised, sunken, flat, ridge, solid, and groove.
     // Create main frame for set of configurations
     pdgui_vmess(0, "sssssi", "frame", current_frameid, "-relief", "groove", "-borderwidth", 1);
     pdgui_vmess(0, "sssssssisi", "pack", current_frameid, "-side", "top", "-fill", "x", "-padx", 10,
                 "-pady", 10);
 
-    // Title of the Frame
+    // Title of the frame
     char labelid[MAXPDSTRING];
     snprintf(labelid, MAXPDSTRING, "%s.title", current_frameid);
     pdgui_vmess(0, "ssss", "label", labelid, "-text", title);
@@ -577,7 +567,7 @@ static int pdlua_properties_newframe(lua_State *L)
     pdlua->properties.current_col = 0;
     pdlua->properties.current_row = 0;
 #else
-    // TODO: purr-data implementation
+    // TODO: purr-data doesn't have frames yet
 #endif
     return 0;
 }

@@ -118,7 +118,7 @@ void pdlua_gfx_free(t_pdlua_gfx *gfx) {
     for(int i = 0; i < gfx->num_images; i++)
     {
         char image_name[64];
-        snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, gfx->images[i]);
+        snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)gfx->images[i]);
         pdgui_vmess(0, "rrs", "image", "delete", image_name);
     }
     if(gfx->num_images) freebytes(gfx->images, gfx->num_images * sizeof(uint64_t));
@@ -1434,7 +1434,7 @@ static int draw_svg(lua_State *L) {
         if(gfx->images[i] == svg_hash)
         {
             char image_name[64];
-            snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, svg_hash);
+            snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)svg_hash);
             pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y, "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
             return 0;
         }
@@ -1499,7 +1499,7 @@ static int draw_svg(lua_State *L) {
     gfx->num_images++;
 
     char image_name[64];
-    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, svg_hash);
+    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)svg_hash);
     pdgui_vmess(0, "rrr s rs", "image", "create", "photo", image_name, "-data", encoded_png);
     pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y, "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
 
@@ -1539,7 +1539,7 @@ static int draw_image(lua_State *L) {
     const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
     char image_name[64];
-    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, image_hash);
+    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)image_hash);
 
 #ifndef PURR_DATA
     // Fast path: scaled image already uploaded to Tk
