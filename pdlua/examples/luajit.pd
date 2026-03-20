@@ -11,12 +11,12 @@
 #X text 299 506 .pd_lua;
 #X text 497 505 .pd_luajit;
 #X text 178 539 Lua version;
-#X text 313 537 5.4;
+#X text 313 537 5.5;
 #X text 487 537 5.1 + compat53;
 #X text 178 569 Performance;
 #X text 298 569 baseline;
 #X text 495 567 ~6x faster;
-#X text 57 102 Currently \, the standard pdlua parser is based on Lua 5.4. The pdluajit parser is based on Lua 5.1 \, with a compatibility layer (compat53) that makes some (but not all) of the Lua 5.3 syntax available as well. The LuaJIT version used is v2.1, f 93;
+#X text 57 102 Currently \, the standard pdlua parser is based on Lua 5.5. The pdluajit parser is based on Lua 5.1 \, with a compatibility layer (compat53) that makes some (but not all) of the Lua 5.3 syntax available as well. The LuaJIT version used is v2.1, f 93;
 #X text 50 157 Note that Lua and LuaJIT have their own separate environment \, so while global variables declared inside Lua can be seen from other files \, they will not cross the Lua/LuaJIT border, f 94;
 #X text 58 42 pdlua can either use Lua or LuaJIT as its parser. While the regular Lua parser offers more modern Lua syntax \, the LuaJIT parser offers much better performance. Files that end with .pd_lua will be picked up by Lua \, whereas files ending with .pd_luajit will run in LuaJIT, f 93;
 #X obj 322 310 luajit-benchmark;
