@@ -333,7 +333,6 @@ static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed) {
 static int gfx_initialize(t_pdlua *obj)
 {
     obj->gfx.object = obj;
-    pdlua_gfx_repaint(obj, 0); // Initial repaint
     return 0;
 }
 
@@ -791,10 +790,10 @@ static int gfx_initialize(t_pdlua *obj)
     gfx->transforms = NULL;
     gfx->num_transforms = 0;
     gfx->num_layers = 0;
+    gfx->first_draw = 0;
     gfx->layer_tags = NULL;
     gfx->mouse_inside = 0;
 
-    pdlua_gfx_repaint(obj, 0);
     return 0;
 }
 
