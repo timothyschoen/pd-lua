@@ -510,7 +510,11 @@ static int reset_transform(lua_State* L) {
 
 static unsigned long long custom_rand() {
     // We use a custom random function to ensure proper randomness across all OS
+#ifdef LUA_USE_JIT // Make sure they use different random seeds, to prevent name clashes
+    static unsigned long long seed = 1;
+#else
     static unsigned long long seed = 0;
+#endif
     const unsigned long long a = 1664525;
     const unsigned long long c = 1013904223;
     const unsigned long long m = 4294967296;  // 2^32
