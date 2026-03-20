@@ -3264,10 +3264,10 @@ void pdlua_instance_setup()
     }
     PDLUA_DEBUG("pdlua lua_open done L = %p", L);
     init_pdlua_environment(L, pdlua_datadir);
-#endif
 #ifndef LUA_USE_JIT
     void pdluajit_instance_setup();
     pdluajit_instance_setup();
+#endif
 #endif
 }
 
