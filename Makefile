@@ -57,7 +57,7 @@ datafiles = \
 
 # the 'pdlua' directory contains subdirectories (with subdirs),
 # so we need to list all of them
-datadirs = $(shell find pdlua -type d)
+datadirs = $(shell /usr/bin/find pdlua -type d)
 
 PDLIBBUILDER_DIR=.
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
