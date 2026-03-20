@@ -1,4 +1,4 @@
-#N canvas 466 44 561 610 10;
+#N canvas 1 45 580 590 10;
 #X declare -lib pdlua -path pdlua;
 #X declare -path pdlua/examples;
 #X text 16 358 See also:;
@@ -171,7 +171,7 @@
 #X connect 117 0 112 0;
 #X connect 118 0 110 0;
 #X restore 446 359 pd quickstart;
-#N canvas 264 71 1254 926 graphics 1;
+#N canvas 1 45 1124 880 graphics 0;
 #X obj 8 77 hello-gui;
 #X text 8 376 function yourclass:initialize(sel \, atoms);
 #X text 24 409 return true;

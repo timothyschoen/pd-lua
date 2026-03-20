@@ -169,8 +169,8 @@ function pdx.unreload(self)
 	 for obj, data in pairs(reloadables[self._name]) do
 	    if type(obj) == "table" and obj ~= self then
 	       -- install the receiver
-	       data.recv = pd.Receive:new():register(obj, "pdluax", "_pdluax")
-	       obj._pdluax = pdluax
+	       data.recv = pd.Receive:new():register(obj, jit and "pdluaxjit" or "pdluax", jit and "_pdluaxjit" or "_pdluax")
+	       obj[jit and "_pdluaxjit" or "_pdluax"] = pdluax
 	       -- record that we have a new receiver and bail out
 	       current = obj
 	       break
@@ -179,7 +179,7 @@ function pdx.unreload(self)
 	 reloadables[self._name].current = current
 	 -- get rid of the old receiver
 	 reloadables[self._name][self].recv:destruct()
-	 self._pdluax = nil
+	 self[jit and "_pdluaxjit" or "_pdluax"] = nil;
       end
       -- restore the object's finalize method
       self.finalize = reloadables[self._name][self].finalize
@@ -215,8 +215,8 @@ function pdx.reload(self)
       self.finalize = finalize
       -- add the receiver
       reloadables[self._name][self].recv =
-	 pd.Receive:new():register(self, "pdluax", "_pdluax")
-      self._pdluax = pdluax
+      pd.Receive:new():register(self, jit and "pdluaxjit" or "pdluax", jit and "_pdluaxjit" or "_pdluax")
+      self[jit and "_pdluaxjit" or "_pdluax"] = pdluax
    end
 end
 
