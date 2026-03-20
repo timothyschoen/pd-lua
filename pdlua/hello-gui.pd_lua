@@ -58,7 +58,7 @@ function hello:mouse_drag(x, y)
     if dragging_rect == true then
         self.draggable_rect_x = self.rect_down_pos[0] + (x - self.mouse_down_pos[0])
         self.draggable_rect_y = self.rect_down_pos[1] + (y - self.mouse_down_pos[1])
-        self.draggable_rect_x = math.clamp(self.draggable_rect_x, 0, 710 - self.draggable_rect_size)
+        self.draggable_rect_x = math.clamp(self.draggable_rect_x, 0, 850 - self.draggable_rect_size)
         self.draggable_rect_y = math.clamp(self.draggable_rect_y, 0, 230 - self.draggable_rect_size)
         self:repaint(3)
     end
