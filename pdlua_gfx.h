@@ -429,7 +429,7 @@ static int draw_line(lua_State* L) {
 }
 
 static int draw_text(lua_State* L) {
-    plugdata_draw_args(L, "lua_draw_text", "sffffFF", 12.f, 0.0f);
+    plugdata_draw_args(L, "lua_draw_text", "sfffFF", 12.f, 0.0f);
     return 0;
 }
 
