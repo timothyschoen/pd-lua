@@ -162,4 +162,8 @@
 #define LUA_FILE_EXTENSION ".pd_lua"
 
 #include "../pdlua.c"
+
+#ifdef PURR_DATA
+#define error lua54_error
+#endif
 #include "lua/onelua.c"

@@ -1223,10 +1223,12 @@ static void pdlua_menu_open(t_pdlua *o)
         SETSYMBOL(&arg, gensym(pathname));
         plugdata_forward_message(0, o, gensym("open_textfile"), 1, &arg);
 #else
+#ifdef PURR_DATA
         if (nw_gui_vmess)
           nw_gui_vmess("open_textfile", "s", pathname);
-        else
-            pdgui_vmess("::pd_menucommands::menu_openfile", "s", pathname);
+#else
+        pdgui_vmess("::pd_menucommands::menu_openfile", "s", pathname);
+#endif
 #endif
     } else {
         lua_pop(__L(), 2); /* pop name, global "pd"*/
@@ -1490,7 +1492,11 @@ static int pdlua_set_arguments(lua_State *L)
             if (redraw) {
                 // update the text in the object box; this makes sure that
                 // the arguments in the display are what we just set
+#ifdef PURR_DATA
+                t_rtext *y = glist_findrtext(o->canvas, x);
+#else
                 t_rtext *y = glist_getrtext(o->canvas, x, 0);
+#endif
                 rtext_retext(y);
                 // redraw the object and its iolets (including incident
                 // cord lines), in case the object box size has changed

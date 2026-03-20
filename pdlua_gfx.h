@@ -39,8 +39,8 @@
 #define STB_IMAGE_RESIZE_STATIC
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "svg/stb_image_resize2.h"
-#endif
 #pragma GCC diagnostic pop
+#endif
 
 #ifdef PURR_DATA
 
@@ -52,7 +52,7 @@
 #define glist_getzoom(x) 1
 
 // this has an extra argument in vanilla (which we ignore)
-int xxsys_hostfontsize(int fontsize, int zoom)
+static int xxsys_hostfontsize(int fontsize, int zoom)
 {
   return sys_hostfontsize(fontsize);
 }
@@ -607,7 +607,7 @@ static void transform_point_float(t_pdlua_gfx *gfx, float *x, float *y) {
 #define glist_eraseiofor xxglist_eraseiofor
 
     /* draw inlets and outlets for a text object or for a graph. */
-void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
+static void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
     char *tag, int x1, int y1, int x2, int y2)
 {
   t_canvas *canvas = glist_getcanvas(glist);
@@ -684,7 +684,7 @@ void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
   }
 }
 
-void glist_eraseiofor(t_glist *glist, t_object *ob, char *tag)
+static void glist_eraseiofor(t_glist *glist, t_object *ob, char *tag)
 {
   char tagbuf[MAXPDSTRING];
   t_canvas *canvas = glist_getcanvas(glist);
@@ -1014,7 +1014,7 @@ static int set_color(lua_State *L) {
     gfx->current_color[7] = '\0';
 #else
     // ... but it is in Purr Data (nw.js gui)
-    a = luaL_optnumber(L, 4, 1.0f) * 255;
+    int a = luaL_optnumber(L, 4, 1.0f) * 255;
     snprintf(gfx->current_color, 10, "#%02X%02X%02X%02X", r, g, b, a);
     gfx->current_color[9] = '\0';
 #endif

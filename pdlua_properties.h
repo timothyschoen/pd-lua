@@ -295,26 +295,7 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), i
 }
 #else
 
-#ifdef PURR_DATA
-void purrdata_add_property(t_pdlua_properties *p, const char *name, const char *type, const char *value, const char* callback) {
-    if(p->property_count >= p->max_properties) {
-        // Reallocate arrays
-        int new_size = p->max_properties + 8;
-        p->names = realloc(p->names, sizeof(char*) * new_size);
-        p->types = realloc(p->types, sizeof(char*) * new_size);
-        p->values = realloc(p->values, sizeof(char*) * new_size);
-        p->callbacks = realloc(p->callbacks, sizeof(char*) * new_size);
-        p->max_properties = new_size;
-    }
-
-    p->names[p->property_count] = strdup(name);
-    p->types[p->property_count] = strdup(type);
-    p->values[p->property_count] = strdup(value);
-    p->callbacks[p->property_count] = strdup(callback);
-    p->property_count++;
-}
-#endif
-
+#ifndef PURR_DATA
 static void pdlua_properties_updaterow(t_pdlua_properties *p)
 {
     p->current_col++;
@@ -323,15 +304,41 @@ static void pdlua_properties_updaterow(t_pdlua_properties *p)
         p->current_col = 0; // not used for now
     }
 }
+#endif
 
 static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
 
     t_pdlua *pdlua = (t_pdlua *)z;
     t_pdlua_properties *p = &pdlua->properties;
-
-#ifndef PURR_DATA
     lua_State *L = __L();
 
+#ifdef PURR_DATA
+    const char *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, (void*)pdlua);
+    gui_start_vmess("gui_external_dialog", "ss", gfx_tag, pdlua->pd.te_g.g_pd->c_name->s_name);
+    gui_start_array();
+
+    lua_getglobal(L, "pd");
+    lua_getfield(L, -1, "_properties");
+
+    lua_pushlightuserdata(L, pdlua);
+    t_pdlua **ctx = lua_newuserdata(L, sizeof(t_pdlua*));
+    *ctx = pdlua;
+
+    luaL_getmetatable(L, "PropertiesContext");
+    lua_setmetatable(L, -2);
+
+    if (lua_pcall(L, 2, 0, 0))
+    {
+        gui_end_array();
+        gui_end_vmess();
+        
+        mylua_error(L, pdlua, "properties");
+        return;
+    }
+
+    gui_end_array();
+    gui_end_vmess();
+#else
     char receiver[MAXPDSTRING];
     snprintf(receiver, MAXPDSTRING, ".%p", p);
     pdlua->properties.properties_receiver = gensym(receiver);
@@ -488,17 +495,6 @@ static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
         buttonOkId);
     pdgui_vmess(0, "r", focusbind);
 #endif
-#else
-
-    t_symbol *gfx_tag = gfxstub_new2(&pdlua->pd.te_g.g_pd, x);
-    gui_start_vmess("gui_external_dialog", "ss", gfx_tag, pdlua->pd.te_g.g_pd->c_name->s_name);
-
-    gui_start_array();
-    for(int i = 0; i < p->property_count; i++) {
-        gui_s(p->names[i]);  // name
-        gui_s(p->values[i]); // value
-    }
-    gui_end_array();
 #endif
 }
 
@@ -600,7 +596,10 @@ static int pdlua_properties_addcheck(lua_State *L)
                 "-sticky", "we");
     pdlua_properties_updaterow(&pdlua->properties);
 #else
-    purrdata_add_property(text, "toggle", init_value ? "1" : "0", method);
+    char name[MAXPDSTRING];
+    snprintf(name, MAXPDSTRING, "%s_%s", text, "_toggle");
+    gui_s(name);
+    gui_i(init_value);
 #endif
     return 0;
 }
@@ -657,7 +656,10 @@ static int pdlua_properties_addtext(lua_State *L)
                 pdlua->properties.current_col, "-sticky", "we", "-padx", 20, "-pady", 20);
     pdlua_properties_updaterow(&pdlua->properties);
 #else
-    purrdata_add_property(text, "symbol", init_value, method);
+    char name[MAXPDSTRING];
+    snprintf(name, MAXPDSTRING, "%s_%s", text, "_symbol");
+    gui_s(name);
+    gui_s(init_value);
 #endif
     return 0;
 }
@@ -752,7 +754,10 @@ static int pdlua_properties_addcolor(lua_State *L) {
     pdlua_properties_updaterow(&pdlua->properties);
 
 #else
-    purrdata_add_property(text, "symbol", initcolor, method);
+    char name[MAXPDSTRING];
+    snprintf(name, MAXPDSTRING, "%s_%s", text, "_symbol");
+    gui_s(name);
+    gui_s(initcolor);
 #endif
 
     return 0;
@@ -764,7 +769,7 @@ static int pdlua_properties_addint(lua_State *L)
 
     const char *text = luaL_checkstring(L, 2);
     const char *method = luaL_checkstring(L, 3);
-    int init = (int)luaL_checknumber(L, 4);
+    int init_value = (int)luaL_checknumber(L, 4);
     double min = luaL_optnumber(L, 5, -1e36);
     double max = luaL_optnumber(L, 6, 1e36);
 
@@ -783,7 +788,7 @@ static int pdlua_properties_addint(lua_State *L)
 
     pdlua_properties_buildvar(pdlua, numvariable);
 
-    pdgui_vmess(0, "ssi", "set", numvariable, init);
+    pdgui_vmess(0, "ssi", "set", numvariable, init_value);
 
     snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties numberbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, numvariable);
@@ -817,9 +822,8 @@ static int pdlua_properties_addint(lua_State *L)
 
     pdlua_properties_updaterow(&pdlua->properties);
 #else
-    char init_value[MAXPDSTRING];
-    snprintf(init_value, MAXPDSTRING, "%d", init);
-    purrdata_add_property(text, "number", init_value, method);
+    gui_s(text);
+    gui_i(init_value);
 #endif
 
     return 0;
@@ -831,7 +835,7 @@ static int pdlua_properties_addfloat(lua_State *L)
 
     const char *text = luaL_checkstring(L, 2);
     const char *method = luaL_checkstring(L, 3);
-    double init = luaL_checknumber(L, 4);
+    double init_value = luaL_checknumber(L, 4);
     double min = luaL_optnumber(L, 5, -1e36);
     double max = luaL_optnumber(L, 6, 1e36);
 
@@ -850,7 +854,7 @@ static int pdlua_properties_addfloat(lua_State *L)
 
     pdlua_properties_buildvar(pdlua, numvariable);
 
-    pdgui_vmess(0, "ssf", "set", numvariable, init);
+    pdgui_vmess(0, "ssf", "set", numvariable, init_value);
 
     snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s _properties floatbox %s $%s]",
              pdlua->properties.properties_receiver->s_name, method, numvariable);
@@ -908,9 +912,8 @@ static int pdlua_properties_addfloat(lua_State *L)
 
     pdlua_properties_updaterow(&pdlua->properties);
 #else
-    char init_value[MAXPDSTRING];
-    snprintf(init_value, MAXPDSTRING, "%f", init);
-    purrdata_add_property(text, "number", init_value, method);
+    gui_s(text);
+    gui_f(init_value);
 #endif
 
     return 0;
@@ -921,9 +924,9 @@ static int pdlua_properties_addcombo(lua_State *L)
 {
     t_pdlua *pdlua = *(t_pdlua**)lua_touserdata(L,1);
 
-    const char *label = luaL_checkstring(L,2);
+    const char *text = luaL_checkstring(L,2);
     const char *method = luaL_checkstring(L,3);
-    int init = luaL_checknumber(L,4) - 1;
+    int init_value = luaL_checknumber(L,4) - 1;
 
     int options_count = lua_rawlen(L,5);
     const char **opts = calloc(options_count, sizeof(char*));
@@ -948,8 +951,8 @@ static int pdlua_properties_addcombo(lua_State *L)
         return 0;
     }
 
-    if(init < options_count) {
-        pdgui_vmess(0,"sss","set", combovar, opts[init]);
+    if(init_value < options_count) {
+        pdgui_vmess(0,"sss","set", combovar, opts[init_value]);
     }
 
     snprintf(pdsend, MAXPDSTRING,
@@ -977,9 +980,8 @@ static int pdlua_properties_addcombo(lua_State *L)
 
     pdlua_properties_updaterow(&pdlua->properties);
 #else
-    char init_value[MAXPDSTRING];
-    snprintf(init_value, MAXPDSTRING, "%d", init);
-    purrdata_add_property(text, "number", init_value, method);
+    gui_s(text);
+    gui_i(init_value);
 #endif
     free(opts);
 
