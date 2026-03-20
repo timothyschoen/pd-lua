@@ -3272,8 +3272,6 @@ void pdlua_setup(const char *datadir, char *versbuf, int versbuf_length, void(*r
 void pdlua_setup(void)
 #endif
 {
-    char                pdluaver[MAXPDSTRING];
-    char                compiled[MAXPDSTRING];
     char                luaversionStr[MAXPDSTRING];
 #if LUA_VERSION_NUM	< 504
     const lua_Number    *luaversion = lua_version (NULL);
@@ -3296,10 +3294,20 @@ void pdlua_setup(void)
       pdlua_version = "0.12.23";
     }
 
-#ifndef LUA_USE_JIT
+#ifndef LUA_USE_JIT // Only print for regular Lua, so it doens't print twice
+    char pdluaver[MAXPDSTRING];
+    char compiled[MAXPDSTRING];
+
     snprintf(pdluaver, MAXPDSTRING-1, "pdlua %s (GPL) 2008 Claude Heiland-Allen, 2014 Martin Peach et al.", pdlua_version);
     snprintf(compiled, MAXPDSTRING-1, "pdlua: compiled for pd-%d.%d on %s",
              PD_MAJOR_VERSION, PD_MINOR_VERSION, BUILD_DATE);
+    // post version and other information
+    post(pdluaver);
+#ifdef ELSE
+    post("Distributed as part of ELSE");
+#else
+    post(compiled);
+#endif
 #endif
 
     lvm = (*luaversion)/100;
@@ -3319,13 +3327,7 @@ void pdlua_setup(void)
     snprintf(versbuf, versbuf_length-1, "pdlua %s (lua %d.%d)", pdlua_version, lvm, lvl);
 #endif
 #endif
-// post version and other information
-    post(pdluaver);
-#ifdef ELSE
-    post("Distributed as part of ELSE");
-#else
-    post(compiled);
-#endif
+
     post(luaversionStr);
 
 // multichannel handling copied from https://github.com/Spacechild1/vstplugin/blob/3f0ed8a800ea238bf204a2ead940b2d1324ac909/pd/src/vstplugin~.cpp#L4122-L4136
