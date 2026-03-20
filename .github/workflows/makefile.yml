@@ -66,13 +66,19 @@ jobs:
         floatsize: [32, 64]
     env:
       CC: gcc
-      MSYSTEM: MINGW64
 
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
+        
+    - name: setup MSYS2 MINGW64
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: mingw-w64-x86_64-gcc make
 
     - name: install dependencies for 32-bit
       if: matrix.floatsize == 32
