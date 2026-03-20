@@ -283,7 +283,6 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), i
     if (lua_pcall(__L(), 3, 0, 0))
     {
         mylua_error(__L(), o, "_set_properties"); // Handle error
-        lua_pop(__L(), 1); // Pop error message
         return;
     }
 }
@@ -1010,7 +1009,6 @@ static void pdlua_properties_apply(t_pdlua *o)
         if (lua_pcall(L, 3, 0, 0))
         {
             mylua_error(L, o, "_set_properties");
-            lua_pop(L, 1);
         }
     }
 
