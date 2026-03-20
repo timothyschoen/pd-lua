@@ -94,6 +94,7 @@ jobs:
         ren Pd-0.56.2 pd-0.56-2
 
     - name: make 32-bit
+      shell: msys2 {0}
       run: make install CFLAGS="-g -O0" CXXFLAGS="-g -O0" objectsdir=./build PDDIR=./pd-0.56-2 PDINCLUDEDIR=./pd-0.56-2/src PDBINDIR=./pd-0.56-2/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
 
     - name: upload
