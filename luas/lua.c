@@ -192,4 +192,8 @@
 // Fix unistd namespace clash
 #define getmode lua55_getmode
 
+// Lua's source will trigger a gcc warning because it hits the maximum inlining limit
+// This is normal and expected, so silence it
+#pragma GCC diagnostic ignored "-Winline"
+
 #include "lua/onelua.c"

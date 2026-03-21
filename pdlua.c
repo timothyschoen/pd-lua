@@ -216,7 +216,7 @@ static t_symbol* global_gensym(const char* s)
 // So we pass a data directory to the setup function instead and store it here.
 // ag: Renamed to pdlua_datadir since we also need this in vanilla when
 // setting up Lua's package.path.
-char pdlua_datadir[MAXPDSTRING];
+char pdlua_datadir[PATH_MAX+1];
 #if PLUGDATA
     // Hook to inform plugdata which class names are lua objects
     void(*plugdata_register_class)(const char*);
@@ -675,7 +675,7 @@ static char *src_info(lua_State *L, char *msg)
         // cf. "The Debug Interface" in the Lua reference manual
         if (*src == '@') src = basename(src+1);
         if (strcmp(ar.what, "Lua") == 0 && strcmp(src, "pd.lua") != 0) {
-            snprintf(msg, MAXPDSTRING-1, "%s: %d", src, ar.linedefined);
+            snprintf(msg, MAXPDSTRING, "%s: %d", src, ar.linedefined);
             return msg;
         }
     }
@@ -835,7 +835,7 @@ static t_pdlua *pdlua_new
             if (object->has_gui) {
                 t_canvas *parent_canvas = glist_getcanvas(object->canvas);
                 char buf[MAXPDSTRING];
-                snprintf(buf, MAXPDSTRING-1, ".x%lx", (unsigned long)parent_canvas);
+                snprintf(buf, MAXPDSTRING, ".x%lx", (unsigned long)parent_canvas);
                 object->gfx.proxycanvas = pdlua_proxycanvas_new(object, gensym(buf));
                 if (!object->gfx.proxycanvas) {
                     pd_error(NULL, "pdlua: failed to create canvas proxy");
@@ -1155,7 +1155,7 @@ static void pdlua_menu_open(t_pdlua *o)
 {
     const char  *name;
     const char  *path;
-    char        pathname[FILENAME_MAX];
+    char        pathname[FILENAME_MAX+1];
     t_class     *class;
 
     /* 20240903 ag: This is surpringly complicated, because there are various
@@ -1192,11 +1192,11 @@ static void pdlua_menu_open(t_pdlua *o)
         path = class->c_externdir->s_name;
         if (sys_isabsolutepath(name)) {
             // pdluax returns an absolute path for its script, just use that.
-            snprintf(pathname, FILENAME_MAX-1, "%s", name);
+            snprintf(pathname, FILENAME_MAX+1, "%s", name);
         } else if (sys_isabsolutepath(path)) {
             // If the externdir is an absolute path, just use it, no questions
             // asked. This should cover most cases.
-            snprintf(pathname, FILENAME_MAX-1, "%s/%s", path, name);
+            snprintf(pathname, FILENAME_MAX+1, "%s/%s", path, name);
         } else {
             // Normally, the externdir of an object should be absolute, but if
             // it isn't, it should be relative to the cwd we recorded at
@@ -1208,7 +1208,7 @@ static void pdlua_menu_open(t_pdlua *o)
                 snprintf(s, PATH_MAX, "%s/%s", pdlua_cwd, name);
             // canonicalize
             if (realpath(s, real_path)) s = real_path;
-            snprintf(pathname, FILENAME_MAX-1, "%s", s);
+            snprintf(pathname, FILENAME_MAX+1, "%s", s);
         }
         //post("path = %s, name = %s, pathname = %s", path, name, pathname);
         lua_pop(__L(), 2); /* pop name, global "pd"*/
@@ -1536,7 +1536,7 @@ static int pdlua_class_new(lua_State *L)
         return 0;
     }
 
-    snprintf(name_gfx, MAXPDSTRING-1, "%s:gfx", name);
+    snprintf(name_gfx, MAXPDSTRING, "%s:gfx", name);
     PDLUA_DEBUG3("pdlua_class_new: L is %p, name is %s stack top is %d", L, name, lua_gettop(L));
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
@@ -2616,15 +2616,16 @@ static void pdlua_packagepath(lua_State *L, const char *path)
     lua_pushstring(L, "path");
     lua_gettable(L, -2);
     const char *packagepath = lua_tostring(L, -1);
-    char *buf = malloc(2*strlen(path)+20+strlen(packagepath));
+    int bufsize = 2*strlen(path)+20+strlen(packagepath);
+    char *buf = malloc(bufsize);
     if (!buf) {
         lua_pop(L, 2);
         return;
     }
 #ifdef _WIN32
-    sprintf(buf, "%s\\?.lua;%s\\?\\init.lua;%s", path, path, packagepath);
+    snprintf(buf, bufsize, "%s\\?.lua;%s\\?\\init.lua;%s", path, path, packagepath);
 #else
-    sprintf(buf, "%s/?.lua;%s/?/init.lua;%s", path, path, packagepath);
+    snprintf(buf, bufsize, "%s/?.lua;%s/?/init.lua;%s", path, path, packagepath);
 #endif
     lua_pop(L, 1);
     lua_pushstring(L, "path");
@@ -2639,9 +2640,9 @@ static void pdlua_packagepath(lua_State *L, const char *path)
         return;
     }
 #ifdef _WIN32
-    sprintf(buf, "%s\\?.dll;%s", path, packagepath);
+    snprintf(buf, bufsize, "%s\\?.dll;%s", path, packagepath);
 #else
-    sprintf(buf, "%s/?.so;%s", path, packagepath);
+    snprintf(buf, bufsize, "%s/?.so;%s", path, packagepath);
 #endif
     lua_pop(L, 1);
     lua_pushstring(L, "cpath");
@@ -3051,7 +3052,7 @@ static int pdlua_loader_fromfd
     reader.fd = fd;
     // we want to have the filename with extension as the name of the chunk
     char filename[MAXPDSTRING];
-    snprintf(filename, MAXPDSTRING-1, "%s.pd_lua", name);
+    snprintf(filename, MAXPDSTRING, "%s.pd_lua", name);
 #if LUA_VERSION_NUM	< 502
     if (lua_load(__L(), pdlua_reader, &reader, filename) || lua_pcall(__L(), 0, 0, 0))
 #else // 5.2 style
@@ -3185,7 +3186,7 @@ static int pdlua_loader_pathwise
 
 static int init_pdlua_environment(lua_State* L, const char* datadir)
 {
-    char pd_lua_path[MAXPDSTRING];
+    char pd_lua_path[PATH_MAX+8];
     t_pdlua_readerdata reader;
     int fd, result;
 
@@ -3199,7 +3200,7 @@ static int init_pdlua_environment(lua_State* L, const char* datadir)
     preload_compat53(L);
 #endif
 
-    snprintf(pd_lua_path, MAXPDSTRING-1, "%s/pd.lua", datadir);
+    snprintf(pd_lua_path, PATH_MAX+8, "%s/pd.lua", datadir);
     PDLUA_DEBUG("pd_lua_path %s", pd_lua_path);
 
     fd = open(pd_lua_path, O_RDONLY);
@@ -3306,8 +3307,8 @@ void pdlua_setup(void)
     char pdluaver[MAXPDSTRING];
     char compiled[MAXPDSTRING];
 
-    snprintf(pdluaver, MAXPDSTRING-1, "pdlua %s (GPL) 2008 Claude Heiland-Allen, 2014 Martin Peach et al.", pdlua_version);
-    snprintf(compiled, MAXPDSTRING-1, "pdlua: compiled for pd-%d.%d on %s",
+    snprintf(pdluaver, MAXPDSTRING, "pdlua %s (GPL) 2008 Claude Heiland-Allen, 2014 Martin Peach et al.", pdlua_version);
+    snprintf(compiled, MAXPDSTRING, "pdlua: compiled for pd-%d.%d on %s",
              PD_MAJOR_VERSION, PD_MINOR_VERSION, BUILD_DATE);
     // post version and other information
     post(pdluaver);
@@ -3321,9 +3322,9 @@ void pdlua_setup(void)
     lvm = (*luaversion)/100;
     lvl = (*luaversion) - (100*lvm);
 #ifdef LUA_USE_JIT
-    snprintf(luaversionStr, MAXPDSTRING-1, "Using luajit with lua version %d.%d", lvm, lvl);
+    snprintf(luaversionStr, MAXPDSTRING, "Using luajit with lua version %d.%d", lvm, lvl);
 #else
-    snprintf(luaversionStr, MAXPDSTRING-1, "Using lua version %d.%d", lvm, lvl);
+    snprintf(luaversionStr, MAXPDSTRING, "Using lua version %d.%d", lvm, lvl);
 #endif
 
 #if PLUGDATA
@@ -3382,7 +3383,7 @@ void pdlua_setup(void)
     // In plugdata we're linked statically and thus c_externdir is empty.
     // Instead, we get our data directory from plugdata and expect to find the
     // external dir in <datadir>/pdlua.
-    snprintf(pdlua_datadir, MAXPDSTRING-1, "%s/pdlua", datadir);
+    snprintf(pdlua_datadir, PATH_MAX+1, "%s/pdlua", datadir);
 #else
     const char *s = pdlua_proxyinlet_class->c_externdir->s_name;
     if (!sys_isabsolutepath(s)) {
@@ -3390,7 +3391,7 @@ void pdlua_setup(void)
         char real_path[PATH_MAX+1];
         if (realpath(s, real_path)) s = real_path;
     }
-    snprintf(pdlua_datadir, MAXPDSTRING-1, "%s", s);
+    snprintf(pdlua_datadir, PATH_MAX+1, "%s", s);
 #endif
     if (!getcwd(pdlua_cwd, MAXPDSTRING))
         // if we can't get the cwd, this is the best that we can do

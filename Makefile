@@ -32,7 +32,10 @@ define forWindows
 luaflags += -DLUA_USE_WINDOWS
 endef
 
-cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)"
+# stbi and nanosvg have functions we don't use
+suppress-wunused=1
+
+cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)" -Iluas/luajit/src
 ifdef PD_MULTICHANNEL
     cflags += -DPD_MULTICHANNEL=$(PD_MULTICHANNEL)
 endif

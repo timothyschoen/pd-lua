@@ -1,5 +1,5 @@
-/** @file lua_55.c
- *  @brief lua_55 -- A wrapper around pdlua.c to allow building against the shipped LuaJIT 2.1 + compat53 submodule
+/** @file luajit.c
+ *  @brief luajit.c -- A wrapper around pdlua.c to allow building against the shipped LuaJIT 2.1 + compat53 submodule
  *  @author Timothy Schoen
  *  @date 2026
  *

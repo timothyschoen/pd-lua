@@ -23,14 +23,12 @@
 
 #if !defined(PLUGDATA) && !defined(PURR_DATA)
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 #define NANOSVG_IMPLEMENTATION
 #include "svg/nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "svg/nanosvgrast.h"
-#define STB_IMAGE_STATIC
 #define STBI_NO_THREAD_LOCALS
+#define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #include "svg/stb_image.h"
 #define STB_IMAGE_WRITE_STATIC
@@ -39,7 +37,6 @@
 #define STB_IMAGE_RESIZE_STATIC
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "svg/stb_image_resize2.h"
-#pragma GCC diagnostic pop
 #endif
 
 #ifdef PURR_DATA
