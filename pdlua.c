@@ -2634,7 +2634,8 @@ static void pdlua_packagepath(lua_State *L, const char *path)
     lua_pushstring(L, "cpath");
     lua_gettable(L, -2);
     packagepath = lua_tostring(L, -1);
-    buf = realloc(buf, 2*strlen(path)+20+strlen(packagepath));
+    bufsize = 2*strlen(path)+20+strlen(packagepath);
+    buf = realloc(buf, bufsize);
     if (!buf) {
         lua_pop(L, 2);
         return;
