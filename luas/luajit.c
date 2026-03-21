@@ -1,4 +1,25 @@
-#define LUA_USE_JIT 1
+/** @file lua_55.c
+ *  @brief lua_55 -- A wrapper around pdlua.c to allow building against the shipped LuaJIT 2.1 + compat53 submodule
+ *  @author Timothy Schoen
+ *  @date 2026
+ *
+ * Copyright (C) 2026 Timothy Schoen
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ */
 
 #include "luajit/src/lua.h"
 #include "luajit/src/lauxlib.h"
@@ -37,8 +58,6 @@ static void preload_compat53(lua_State *L) {
     lua_call(L, 1, 0);
 }
 
-#define LUA_FILE_EXTENSION ".pd_luajit"
-#define LUA_USE_JIT 1
 
 #undef lua_load
 #undef lua_gc
@@ -61,5 +80,8 @@ static void preload_compat53(lua_State *L) {
 #ifdef PLUGDATA
 #define plugdata_register_class plugdata_register_class_jit
 #endif
+
+#define LUA_FILE_EXTENSION ".pd_luajit"
+#define LUA_USE_JIT 1
 
 #include "../pdlua.c"

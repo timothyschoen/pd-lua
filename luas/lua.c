@@ -1,3 +1,26 @@
+/** @file lua.c
+ *  @brief lua.c -- A wrapper around pdlua.c to allow building against the shipped Lua 5.5 submodule
+ *  @author Timothy Schoen
+ *  @date 2026
+ *
+ * Copyright (C) 2026 Timothy Schoen
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ */
+
 #define luaL_addgsub lua55_luaL_addgsub
 #define luaL_addlstring lua55_luaL_addlstring
 #define luaL_addstring lua55_luaL_addstring
@@ -152,8 +175,7 @@
 #define luaopen_table lua55_luaopen_table
 #define luaopen_utf8 lua55_luaopen_utf8
 #define l_likely(x)	luai_likely(x)
-#define l_unlikely(x)	luai_unlikely(x)
-
+#define l_unlikely(x) luai_unlikely(x)
 
 #include "lua/lua.h"
 #include "lua/lauxlib.h"

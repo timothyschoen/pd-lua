@@ -1,6 +1,6 @@
 /** @file pdlua_properties.h
- *  @brief pdlpdlua_propertiesua_gfx -- an extension to pdlua that spawning properties windowds
- *  @author Charles K. Neimog
+ *  @brief pdlpdlua_propertiesua_gfx -- an extension to pdlua to allow spawning properties windows
+ *  @author Charles K. Neimog and Timothy Schoen
  *  @date 2026
  *
  * Copyright (C) 2026 Charles K. Neimog and Timothy Schoen
@@ -48,7 +48,7 @@ static void pdlua_properties_setup(lua_State* L)
     luaL_setfuncs(L, properties_methods, 0);
 }
 
-static void pdlua_properties_free(t_pdlua_properties *p)
+static void pdlua_properties_free(t_pdlua_properties *MAYBE_UNUSED(p))
 {
 #ifdef PURR_DATA
     if(p->property_count)
@@ -176,7 +176,7 @@ cleanup:
     va_end(defaults);
 }
 
-static void pdlua_properties(t_gobj *z, t_glist * IGNORE_UNUSED(owner))
+static void pdlua_properties(t_gobj *z, t_glist *MAYBE_UNUSED(owner))
 {
     t_pdlua *pdlua = (t_pdlua *)z;
     lua_State *L = __L();
@@ -240,7 +240,7 @@ static int pdlua_properties_addcombo(lua_State *L)
     return 0;
 }
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol * IGNORE_UNUSED(s), int argc, t_atom *argv)
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol *MAYBE_UNUSED(s), int argc, t_atom *argv)
 {
     if (argc < 2)
         return;
@@ -328,7 +328,7 @@ static inline void purrdata_add_callback(t_pdlua_properties *p, const char *type
 
 #endif
 
-static void pdlua_properties(t_gobj *z, t_glist *IGNORE_UNUSED(owner)) {
+static void pdlua_properties(t_gobj *z, t_glist *MAYBE_UNUSED(owner)) {
 
     t_pdlua *pdlua = (t_pdlua *)z;
     t_pdlua_properties *p = &pdlua->properties;
@@ -1056,7 +1056,7 @@ static void pdlua_properties_apply(t_pdlua *o)
     p->pending_count = 0;
 }
 
-static void pdlua_properties_receiver(t_pdlua *o, t_symbol *IGNORE_UNUSED(s), int argc, t_atom *argv)
+static void pdlua_properties_receiver(t_pdlua *o, t_symbol *MAYBE_UNUSED(s), int argc, t_atom *argv)
 {
     t_pdlua_properties *p = &o->properties;
 

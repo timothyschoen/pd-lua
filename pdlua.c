@@ -92,13 +92,13 @@
 # define CLASS_MULTICHANNEL 0
 #endif
 
-#ifdef IGNORE_UNUSED
+#ifdef MAYBE_UNUSED
 #elif defined(__GNUC__)
-# define IGNORE_UNUSED(x) UNUSED_ ## x __attribute__((unused))
+# define MAYBE_UNUSED(x) x __attribute__((unused))
 #elif defined(__LCLINT__)
-# define IGNORE_UNUSED(x) /*@unused@*/ x
+# define MAYBE_UNUSED(x) /*@unused@*/ x
 #else
-# define IGNORE_UNUSED(x) x
+# define MAYBE_UNUSED(x) x
 #endif
 
 /* BAD: end of bad section */
@@ -391,7 +391,7 @@ static t_class *pdlua_proxycanvas_class;
 /** Lua file reader callback. */
 static const char *pdlua_reader
 (
-    lua_State *IGNORE_UNUSED(L), /**< Lua interpreter state. */
+    lua_State *MAYBE_UNUSED(L), /**< Lua interpreter state. */
     void *rr, /**< Lua file reader state. */
     size_t *size /**< How much data we have read. */
 )
@@ -492,7 +492,7 @@ static void pdlua_proxyinlet_anything
 static void pdlua_proxyinlet_fwd
 (
     t_pdlua_proxyinlet  *p, /**< The proxy inlet that received the message. */
-    t_symbol            *IGNORE_UNUSED(s), /**< The message selector, which is always "fwd" */
+    t_symbol            *MAYBE_UNUSED(s), /**< The message selector, which is always "fwd" */
     int                 argc, /**< The message length. */
     t_atom              *argv /**< The atoms in the message. The first atom is the actual selector */
 )
@@ -3116,7 +3116,7 @@ static int pdlua_loader_legacy
 (
     t_canvas    *canvas, /**< Pd canvas to use to find the script. */
     char        *name, /**< The name of the script (without .pd_lua extension). */
-    char        *IGNORE_UNUSED(path) /**< Path variable for new loader, unused here */
+    char        *MAYBE_UNUSED(path) /**< Path variable for new loader, unused here */
 )
 {
     char                dirbuf[MAXPDSTRING];
@@ -3129,7 +3129,7 @@ static int pdlua_loader_legacy
 
 static int pdlua_loader_pathwise
 (
-    t_canvas    *IGNORE_UNUSED(canvas), /**< Pd canvas to use to find the script. */
+    t_canvas    *MAYBE_UNUSED(canvas), /**< Pd canvas to use to find the script. */
     const char  *objectname, /**< The name of the script (without .pd_lua extension). */
     const char  *path /**< The directory to search for the script */
 )
