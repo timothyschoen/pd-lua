@@ -32,7 +32,7 @@ define forWindows
 luaflags += -DLUA_USE_WINDOWS
 endef
 
-cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)"
+cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)" -Wno-unused-function
 ifdef PD_MULTICHANNEL
     cflags += -DPD_MULTICHANNEL=$(PD_MULTICHANNEL)
 endif
