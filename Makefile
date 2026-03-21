@@ -59,7 +59,7 @@ $(luajit_lib):
 ifeq ($(system), Windows)
 	$(MAKE) -C $(luajit_dir) BUILDMODE=static XCFLAGS="-DLUAJIT_ENABLE_LUA52COMPAT"
 else
-	$(MAKE) -C $(luajit_dir) BUILDMODE=static CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.6 XCFLAGS="-DLUAJIT_ENABLE_LUA52COMPAT"
+	$(MAKE) -C $(luajit_dir) BUILDMODE=static CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.7 XCFLAGS="-DLUAJIT_ENABLE_LUA52COMPAT"
 endif
 
 pdlua.$(extension): $(luajit_lib)
