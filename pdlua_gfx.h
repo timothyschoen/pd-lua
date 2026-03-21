@@ -103,7 +103,7 @@ static int free_path(lua_State *L);
 
 static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed); // only for pd-vanilla, to delete all tcl/tk items
 
-void pdlua_gfx_free(t_pdlua_gfx *gfx) {
+static void pdlua_gfx_free(t_pdlua_gfx *gfx) {
 #ifndef PLUGDATA
     for(int i = 0; i < gfx->num_layers; i++)
     {
@@ -124,7 +124,7 @@ void pdlua_gfx_free(t_pdlua_gfx *gfx) {
 }
 
 // Trigger repaint callback in lua script
-void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
+static void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
 #ifndef PLUGDATA
     o->gfx.first_draw = firsttime;
 #endif
@@ -145,7 +145,7 @@ void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
 }
 
 // Pass mouse events to lua script
-void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
+static void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
 
     lua_getglobal(__L(), "pd");
     lua_getfield (__L(), -1, "_mouseevent");
@@ -163,26 +163,27 @@ void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
 }
 
 // Pass mouse events to lua script (but easier to understand)
-void pdlua_gfx_mouse_down(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_down(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 0);
 }
-void pdlua_gfx_mouse_up(t_pdlua *o, int x, int y) {
+
+static void pdlua_gfx_mouse_up(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 1);
 }
 
-void pdlua_gfx_mouse_move(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_move(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 2);
 }
 
-void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 3);
 }
 
-void pdlua_gfx_mouse_enter(t_pdlua *x, int xpos, int ypos) {
+static void pdlua_gfx_mouse_enter(t_pdlua *x, int xpos, int ypos) {
     pdlua_gfx_mouse_event(x, xpos, ypos, 4);
 }
 
-void pdlua_gfx_mouse_exit(t_pdlua *x, int xpos, int ypos) {
+static void pdlua_gfx_mouse_exit(t_pdlua *x, int xpos, int ypos) {
     pdlua_gfx_mouse_event(x, xpos, ypos, 5);
 }
 
@@ -247,7 +248,7 @@ static const luaL_Reg gfx_methods[] = {
     {NULL, NULL} // Sentinel to end the list
 };
 
-int pdlua_gfx_setup(lua_State *L) {
+static int pdlua_gfx_setup(lua_State *L) {
     // for Path(x, y) constructor
     lua_pushcfunction(L, start_path);
     lua_setglobal(L, "Path");

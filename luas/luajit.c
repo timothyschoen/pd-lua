@@ -63,22 +63,10 @@ static void preload_compat53(lua_State *L) {
 #undef lua_gc
 #define lua_gc(L, what) lua_gc(L, what, 0)
 
-#define pdlua_gfx_free pdluajit_gfx_free
-#define pdlua_gfx_mouse_down pdluajit_gfx_mouse_down
-#define pdlua_gfx_mouse_drag pdluajit_gfx_mouse_drag
-#define pdlua_gfx_mouse_enter pdluajit_gfx_mouse_enter
-#define pdlua_gfx_mouse_event pdluajit_gfx_mouse_event
-#define pdlua_gfx_mouse_exit pdluajit_gfx_mouse_exit
-#define pdlua_gfx_mouse_move pdluajit_gfx_mouse_move
-#define pdlua_gfx_mouse_up pdluajit_gfx_mouse_up
-#define pdlua_gfx_repaint pdluajit_gfx_repaint
-#define pdlua_gfx_setup pdluajit_gfx_setup
-#define pdlua_instance_setup pdluajit_instance_setup
 #define pdlua_setup pdluajit_setup
-#define pdlua_datadir pdluajit_datadir
 
 #ifdef PLUGDATA
-#define plugdata_register_class plugdata_register_class_jit
+#define pdlua_instance_setup pdluajit_instance_setup
 #endif
 
 #define LUA_FILE_EXTENSION ".pd_luajit"

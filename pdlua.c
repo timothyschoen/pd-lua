@@ -216,10 +216,10 @@ static t_symbol* global_gensym(const char* s)
 // So we pass a data directory to the setup function instead and store it here.
 // ag: Renamed to pdlua_datadir since we also need this in vanilla when
 // setting up Lua's package.path.
-char pdlua_datadir[PATH_MAX+1];
+static char pdlua_datadir[PATH_MAX+1];
 #if PLUGDATA
-    // Hook to inform plugdata which class names are lua objects
-    void(*plugdata_register_class)(const char*);
+// Hook to inform plugdata which class names are lua objects
+static void(*plugdata_register_class)(const char*);
 #endif
 static char pdlua_cwd[MAXPDSTRING];
 
@@ -3255,9 +3255,10 @@ static int init_pdlua_environment(lua_State* L, const char* datadir)
     return 1; /* success */
 }
 
+#ifdef PLUGDATA
 void pdlua_instance_setup()
 {
-#if PDINSTANCE
+#ifdef PDINSTANCE
     lua_State* L = create_lua_state();
     if (!L) {
         pd_error(NULL, "lua: luaL_newstate() failed");
@@ -3271,6 +3272,7 @@ void pdlua_instance_setup()
 #endif
 #endif
 }
+#endif
 
 #ifdef _WIN32
 __declspec(dllexport)
