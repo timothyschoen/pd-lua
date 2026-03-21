@@ -1,5 +1,5 @@
 /** @file pdlua_properties.h
- *  @brief pdlpdlua_propertiesua_gfx -- an extension to pdlua to allow spawning properties windows
+ *  @brief pdlua_properties.h -- an extension to pdlua to allow spawning properties windows
  *  @author Charles K. Neimog and Timothy Schoen
  *  @date 2026
  *
