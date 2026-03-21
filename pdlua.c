@@ -104,7 +104,7 @@
 /* BAD: end of bad section */
 
 /* If defined, PDLUA_DEBUG lets pdlua post a lot of text */
-//#define PDLUA_DEBUG post
+#define PDLUA_DEBUG post
 #ifndef PDLUA_DEBUG
 //static void PDLUA_DEBUG(const char *fmt, ...) {;}
 # define PDLUA_DEBUG(x,y)
