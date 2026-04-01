@@ -25,39 +25,81 @@ typedef struct _gfx_transform
     float x, y;
 } gfx_transform;
 
+#define MAX_PENDING_PROPERTIES 128
+#define MAX_PROPERTY_ARGS 8
+
+typedef struct {
+    char guitype[MAXPDSTRING];
+    char method[MAXPDSTRING];
+    int  argc;
+    t_atom argv[MAX_PROPERTY_ARGS];
+} t_pending_property;
+
+typedef struct _pdlua_properties
+{
+#ifndef PLUGDATA
+    t_pending_property pending[MAX_PENDING_PROPERTIES];
+    int pending_count;
+    t_symbol *current_frame_id;
+    t_symbol *current_frame_name;
+    t_symbol *properties_receiver;
+    int property_count;
+#ifndef PURR_DATA
+    int frame_count;
+    int max_col, max_row;
+    int current_col, current_row;
+#else
+    t_symbol **property_method_callbacks;
+    t_symbol **property_types;
+#endif
+#else
+    void(*plugdata_properties_callback)(void*, t_symbol*, int, t_atom*); // Callback to add properties in plugdata
+#endif
+} t_pdlua_properties;
+
 typedef struct _pdlua_gfx
 {
     // Size variables
     int width, height;
     void *object;
-    
 #ifndef PLUGDATA
     char object_tag[128]; // Tcl/tk tag that is attached to all drawings
     char order_tag[64]; // Tag for invisible line, used to preserve correct object ordering
     char current_item_tag[64]; // Tcl/tk tag that is only attached to the current drawing in progress
-    char** layer_tags;
+    char **layer_tags;
     int num_layers;
-    char* current_layer_tag;
-    gfx_transform* transforms;
+    char *current_layer_tag;
+    gfx_transform *transforms;
     int num_transforms;
     char current_color[10]; // Keep track of current color
-    
-    // Variables to keep track of mouse button state and drag position
-    int mouse_drag_x, mouse_drag_y, mouse_down;
+
+    // Variables to keep track of mouse position, button state and whether the mouse is inside the object
+    int mouse_x, mouse_y, mouse_down, mouse_inside;
     int first_draw;
+    int paint_generation;
 #ifndef PURR_DATA
-    uint64_t* images;
+    uint64_t *images;
+    uint32_t *images_last_used;
     int num_images;
+    int is_selected;
 #endif
+    struct pdlua_proxycanvas *proxycanvas;
 #else
     int current_layer;
     void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*); // Callback to perform drawing in plugdata
+    void(*pdlua_gfx_mouse_down)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_up)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_move)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_drag)(void* o, int x, int y);
+    void(*pdlua_gfx_mouse_enter)(void *x, int xpos, int ypos);
+    void(*pdlua_gfx_mouse_exit)(void *x, int xpos, int ypos);
+    void(*pdlua_gfx_repaint)(void* o, int firsttime);
 #endif
 } t_pdlua_gfx;
 
 
 /** Pd object data. */
-typedef struct pdlua 
+typedef struct pdlua
 {
     t_object                pd;               // We are a Pd object.
     int                     inlets;           // Number of inlets.
@@ -73,9 +115,10 @@ typedef struct pdlua
     t_canvas                *canvas;          // The canvas that the object was created on.
     int                     has_gui;          // True if graphics are enabled.
     t_pdlua_gfx             gfx;              // Holds state for graphics.
+    t_pdlua_properties      properties;       // Holds state for properties panel
     t_class                 *pdlua_class;     // Holds our class pointer.
     t_class                 *pdlua_class_gfx; // Holds our gfx class pointer.
     t_signal                **sp;             // Array of signal pointers for multichannel audio.
 } t_pdlua;
 
-lua_State* __L();
+static lua_State* __L();

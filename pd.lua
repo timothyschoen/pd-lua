@@ -91,6 +91,28 @@ pd._perform_dsp = function (object, ...)
   end
 end
 
+-- draw properties
+pd._properties = function (object, p)
+  local obj = pd._objects[object]
+  if nil ~= obj and type(obj.properties) == "function" then
+        obj:properties(p)
+        return true
+  else
+        return false
+  end
+end
+
+-- set properties
+pd._set_properties = function (object, method, args)
+  local obj = pd._objects[object]
+  if obj ~= nil and type(obj[method]) == "function" then
+        local propertiesmethod = obj[method]
+        propertiesmethod(obj, args) -- Passa `obj` explicitamente como `self`
+  else
+        pd._error(obj._object, "method ".. method .. " does not exist")
+  end
+end
+
 -- repaint method dispatcher
 pd._repaint = function (object)
   local obj = pd._objects[object]
@@ -114,6 +136,12 @@ pd._mouseevent = function (object, x, y, event_type)
     end
     if event_type == 3 and type(obj.mouse_drag) == "function" then
       obj:mouse_drag(x, y)
+    end
+    if event_type == 4 and type(obj.mouse_enter) == "function" then
+      obj:mouse_enter(x, y)
+    end
+    if event_type == 5 and type(obj.mouse_exit) == "function" then
+      obj:mouse_exit(x, y)
     end
   end
 end
@@ -341,11 +369,12 @@ function pd.Class:register(name)
   self._class, self._class_gfx = pd._register(name)  -- register new class
   self._name = name
   self._loadpath = fullpath
+  local suffix = jit and ".pd_luajit" or ".pd_lua"
   if name == "pdlua" then
     self._scriptname = "pd.lua"
   else
-    self._scriptname = name .. ".pd_lua"
-  end -- mrpeach 20111027
+    self._scriptname = name .. suffix
+  end-- mrpeach 20111027
   return self                       -- return new
 end
 
@@ -362,6 +391,9 @@ function pd.Class:construct(sel, atoms)
     pd._createoutlets(self._object, self.outlets)
     if type(self.paint) == "function" then
         pd._creategui(self._object)
+    end
+    if(type(self.properties) == "function") then
+        pd._set_propertiesfn(self._object)
     end
     self:postinitialize()
     return self
@@ -572,7 +604,7 @@ function pd.Class:get_class() -- accessor for t_class*
   return pd._get_class(self) or nil
 end
 
-local lua = pd.Class:new():register("pdlua")  -- global controls (the [pdlua] object only)
+local lua = pd.Class:new():register(jit and "pdluajit" or "pdlua")  -- global controls (the [pdlua] object only)
 
 function lua:initialize(sel, atoms)
   self.inlets = 1
@@ -584,8 +616,7 @@ function lua:in_1_load(atoms)  -- execute a script
   self:dofile(atoms[1])
 end
 
-
-local luax = pd.Class:new():register("pdluax")  -- classless lua externals (like [pdluax foo])
+local luax = pd.Class:new():register(jit and "pdluaxjit" or "pdluax")  -- classless lua externals (like [pdluax foo])
 
 function luax:initialize(sel, atoms)          -- motivation: pd-list 2007-09-23
   if not atoms[1] then
@@ -634,7 +665,17 @@ end
 -- constants used in the signal and graphics API
 DATA = 0
 SIGNAL = 1
-Colors = {background = 0, foreground = 1, outline = 2}
+
+-- Text alignment constants
+TOP_LEFT = 0
+TOP_CENTER = 1
+TOP_RIGHT = 2
+CENTER_LEFT = 3
+CENTER = 4
+CENTER_RIGHT = 5
+BOTTOM_LEFT = 6
+BOTTOM_CENTER = 7
+BOTTOM_RIGHT = 8
 
 -- pre-load pdx.lua (advanced live coding support); if you don't want this,
 -- just comment out the line below

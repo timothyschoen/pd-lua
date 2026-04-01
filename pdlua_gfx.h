@@ -22,12 +22,21 @@
  */
 
 #if !defined(PLUGDATA) && !defined(PURR_DATA)
+
 #define NANOSVG_IMPLEMENTATION
 #include "svg/nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "svg/nanosvgrast.h"
+#define STBI_NO_THREAD_LOCALS
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#include "svg/stb_image.h"
+#define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "svg/stb_image_write.h"
+#define STB_IMAGE_RESIZE_STATIC
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "svg/stb_image_resize2.h"
 #endif
 
 #ifdef PURR_DATA
@@ -40,7 +49,7 @@
 #define glist_getzoom(x) 1
 
 // this has an extra argument in vanilla (which we ignore)
-int xxsys_hostfontsize(int fontsize, int zoom)
+static int xxsys_hostfontsize(int fontsize, int zoom)
 {
   return sys_hostfontsize(fontsize);
 }
@@ -59,41 +68,42 @@ static int gfx_initialize(t_pdlua *obj);
 static int set_size(lua_State *L);
 static int get_size(lua_State *L);
 static int start_paint(lua_State *L);
-static int end_paint(lua_State* L);
+static int end_paint(lua_State *L);
 
-static int set_color(lua_State* L);
+static int set_color(lua_State *L);
 
-static int fill_ellipse(lua_State* L);
-static int stroke_ellipse(lua_State* L);
-static int fill_all(lua_State* L);
-static int fill_rect(lua_State* L);
-static int stroke_rect(lua_State* L);
-static int fill_rounded_rect(lua_State* L);
-static int stroke_rounded_rect(lua_State* L);
+static int fill_ellipse(lua_State *L);
+static int stroke_ellipse(lua_State *L);
+static int fill_all(lua_State *L);
+static int fill_rect(lua_State *L);
+static int stroke_rect(lua_State *L);
+static int fill_rounded_rect(lua_State *L);
+static int stroke_rounded_rect(lua_State *L);
 
-static int draw_line(lua_State* L);
-static int draw_text(lua_State* L);
-static int draw_svg(lua_State* L);
+static int draw_line(lua_State *L);
+static int draw_text(lua_State *L);
+static int draw_svg(lua_State *L);
+static int draw_image(lua_State *L);
 
-static int start_path(lua_State* L);
-static int line_to(lua_State* L);
-static int quad_to(lua_State* L);
-static int cubic_to(lua_State* L);
-static int close_path(lua_State* L);
-static int stroke_path(lua_State* L);
-static int fill_path(lua_State* L);
+static int start_path(lua_State *L);
+static int line_to(lua_State *L);
+static int quad_to(lua_State *L);
+static int cubic_to(lua_State *L);
+static int close_path(lua_State *L);
+static int stroke_path(lua_State *L);
+static int fill_path(lua_State *L);
 
-static int translate(lua_State* L);
-static int scale(lua_State* L);
-static int reset_transform(lua_State* L);
+static int translate(lua_State *L);
+static int scale(lua_State *L);
+static int reset_transform(lua_State *L);
 
-static int free_path(lua_State* L);
+static int free_path(lua_State *L);
 
 // pdlua_gfx_clear, pdlua_gfx_repaint and pdlua_gfx_mouse_* correspond to the various callbacks the user can assign
 
 static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed); // only for pd-vanilla, to delete all tcl/tk items
 
-void pdlua_gfx_free(t_pdlua_gfx *gfx) {
+static void pdlua_gfx_free(t_pdlua_gfx *gfx) {
 #ifndef PLUGDATA
     for(int i = 0; i < gfx->num_layers; i++)
     {
@@ -105,23 +115,25 @@ void pdlua_gfx_free(t_pdlua_gfx *gfx) {
     for(int i = 0; i < gfx->num_images; i++)
     {
         char image_name[64];
-        snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, gfx->images[i]);
+        snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)gfx->images[i]);
         pdgui_vmess(0, "rrs", "image", "delete", image_name);
     }
-    if(gfx->num_images) freebytes(gfx->images, gfx->num_images * sizeof(uint64_t));
+    if(gfx->num_images) {
+        freebytes(gfx->images, gfx->num_images * sizeof(uint64_t));
+        freebytes(gfx->images_last_used, gfx->num_images * sizeof(uint32_t));
+    }
 #endif
 #endif
 }
 
 // Trigger repaint callback in lua script
-void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
+static void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
 #ifndef PLUGDATA
     o->gfx.first_draw = firsttime;
 #endif
     lua_getglobal(__L(), "pd");
     lua_getfield (__L(), -1, "_repaint");
     lua_pushlightuserdata(__L(), o);
-
 
     if (lua_pcall(__L(), 1, 0, 0))
     {
@@ -135,8 +147,7 @@ void pdlua_gfx_repaint(t_pdlua *o, int firsttime) {
 }
 
 // Pass mouse events to lua script
-void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
-
+static void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
     lua_getglobal(__L(), "pd");
     lua_getfield (__L(), -1, "_mouseevent");
     lua_pushlightuserdata(__L(), o);
@@ -153,19 +164,28 @@ void pdlua_gfx_mouse_event(t_pdlua *o, int x, int y, int type) {
 }
 
 // Pass mouse events to lua script (but easier to understand)
-void pdlua_gfx_mouse_down(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_down(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 0);
 }
-void pdlua_gfx_mouse_up(t_pdlua *o, int x, int y) {
+
+static void pdlua_gfx_mouse_up(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 1);
 }
 
-void pdlua_gfx_mouse_move(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_move(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 2);
 }
 
-void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
+static void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
     pdlua_gfx_mouse_event(o, x, y, 3);
+}
+
+static void pdlua_gfx_mouse_enter(t_pdlua *x, int xpos, int ypos) {
+    pdlua_gfx_mouse_event(x, xpos, ypos, 4);
+}
+
+static void pdlua_gfx_mouse_exit(t_pdlua *x, int xpos, int ypos) {
+    pdlua_gfx_mouse_event(x, xpos, ypos, 5);
 }
 
 // Represents a path object, created with path.new(x, y)
@@ -174,7 +194,7 @@ void pdlua_gfx_mouse_drag(t_pdlua *o, int x, int y) {
 typedef struct _path_state
 {
     // Variables for managing vector paths
-    float* path_segments;
+    float *path_segments;
     int num_path_segments;
     int num_path_segments_allocated;
     float path_start_x, path_start_y;
@@ -182,11 +202,11 @@ typedef struct _path_state
 
 
 // Pops the graphics context off the argument list and returns it
-static t_pdlua_gfx *pop_graphics_context(lua_State* L)
+static t_pdlua_gfx *pop_graphics_context(lua_State *L)
 {
-    t_pdlua_gfx* ctx = (t_pdlua_gfx*)luaL_checkudata(L, 1, "GraphicsContext");
+    t_pdlua_gfx **ud = (t_pdlua_gfx**)luaL_checkudata(L, 1, "GraphicsContext");
     lua_remove(L, 1);
-    return ctx;
+    return *ud;
 }
 
 // Register functions with Lua
@@ -219,6 +239,7 @@ static const luaL_Reg gfx_methods[] = {
     {"draw_line", draw_line},
     {"draw_text", draw_text},
     {"draw_svg", draw_svg},
+    {"draw_image", draw_image},
     {"stroke_path", stroke_path},
     {"fill_path", fill_path},
     {"fill_all", fill_all},
@@ -228,7 +249,7 @@ static const luaL_Reg gfx_methods[] = {
     {NULL, NULL} // Sentinel to end the list
 };
 
-int pdlua_gfx_setup(lua_State* L) {
+static int pdlua_gfx_setup(lua_State *L) {
     // for Path(x, y) constructor
     lua_pushcfunction(L, start_path);
     lua_setglobal(L, "Path");
@@ -250,7 +271,7 @@ int pdlua_gfx_setup(lua_State* L) {
     return 1; // Number of values pushed onto the stack
 }
 
-static int get_size(lua_State* L)
+static int get_size(lua_State *L)
 {
     if (!lua_islightuserdata(L, 1)) {
         return 0;
@@ -266,20 +287,42 @@ static int get_size(lua_State* L)
 
 // we make this global because paths are disconnected from object, but still need to send messages to plugdata
 // it really doesn't matter since all these function callbacks point to the same function anyway
-static void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*) = NULL;
+static PERTHREAD void(*plugdata_draw_callback)(void*, int, t_symbol*, int, t_atom*) = NULL;
 
 // Wrapper around draw callback to plugdata
-static inline void plugdata_draw(t_pdlua *obj, int layer, t_symbol* sym, int argc, t_atom* argv)
+static inline void plugdata_draw(t_pdlua *obj, int layer, t_symbol *sym, int argc, t_atom *argv)
 {
     if(plugdata_draw_callback) {
         plugdata_draw_callback(obj, layer, sym, argc, argv);
     }
 }
 
-static inline void plugdata_draw_path(t_symbol* sym, int argc, t_atom* argv)
+static inline void plugdata_draw_args(lua_State *L, const char *sym, const char *fmt, ...)
 {
-    if(plugdata_draw_callback) {
-        plugdata_draw_callback(NULL, -1, sym, argc, argv);
+    t_pdlua_gfx *gfx = pop_graphics_context(L);
+    t_atom atoms[16];
+    int argc = strlen(fmt);
+
+    va_list defaults;
+    va_start(defaults, fmt);
+
+    for (int i = 0; i < argc; i++)
+    {
+        int lua_idx = i + 1;
+        switch (fmt[i])
+        {
+            case 'f': SETFLOAT (&atoms[i], (t_float)luaL_checknumber(L, lua_idx)); break;
+            case 's': SETSYMBOL(&atoms[i], gensym(luaL_checkstring(L, lua_idx))); break;
+            case 'F': SETFLOAT (&atoms[i], (t_float)luaL_optnumber(L, lua_idx, va_arg(defaults, double))); break;
+            case 'S': SETSYMBOL(&atoms[i], gensym(luaL_optstring(L, lua_idx, va_arg(defaults, const char*)))); break;
+            default:  break;
+        }
+    }
+
+    va_end(defaults);
+
+    if (plugdata_draw_callback) {
+        plugdata_draw_callback(gfx->object, gfx->current_layer, gensym(sym), argc, atoms);
     }
 }
 
@@ -289,15 +332,13 @@ static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed) {
 static int gfx_initialize(t_pdlua *obj)
 {
     obj->gfx.object = obj;
-    pdlua_gfx_repaint(obj, 0); // Initial repaint
     return 0;
 }
 
-static int set_size(lua_State* L)
+static int set_size(lua_State *L)
 {
-    if (!lua_islightuserdata(L, 1)) {
+    if (!lua_islightuserdata(L, 1))
         return 0;
-    }
 
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     obj->gfx.width = luaL_checknumber(L, 2);
@@ -309,7 +350,7 @@ static int set_size(lua_State* L)
     return 0;
 }
 
-static int start_paint(lua_State* L) {
+static int start_paint(lua_State *L) {
     if (!lua_islightuserdata(L, 1)) {
         lua_pushboolean(L, 0); // Return false if the argument is not a pointer
         return 1;
@@ -317,7 +358,8 @@ static int start_paint(lua_State* L) {
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     int layer = luaL_checknumber(L, 2);
 
-    lua_pushlightuserdata(L, &obj->gfx);
+    t_pdlua_gfx **ud = (t_pdlua_gfx**)lua_newuserdata(L, sizeof(t_pdlua_gfx*));
+    *ud = &obj->gfx;
     luaL_setmetatable(L, "GraphicsContext");
 
     plugdata_draw_callback = obj->gfx.plugdata_draw_callback;
@@ -327,7 +369,7 @@ static int start_paint(lua_State* L) {
     return 1;
 }
 
-static int end_paint(lua_State* L) {
+static int end_paint(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
     plugdata_draw(obj, gfx->current_layer, gensym("lua_end_paint"), 0, NULL);
@@ -335,158 +377,79 @@ static int end_paint(lua_State* L) {
     return 0;
 }
 
-static int set_color(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    if (lua_gettop(L) == 1) { // Single argument: parse as color ID instead of RGB
-        t_atom arg;
-        SETFLOAT(&arg, luaL_checknumber(L, 1)); // color ID
-        plugdata_draw(obj, gfx->current_layer, gensym("lua_set_color"), 1, &arg);
+static int set_color(lua_State *L) {
+    if (lua_gettop(L) == 2) { // Single argument: parse as color ID instead of RGB
+        plugdata_draw_args(L, "lua_set_color", "f");
         return 0;
     }
 
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // r
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // g
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // b
-
-    if (lua_gettop(L) >= 4) { // object and table are already on stack, hence 5
-        // alpha (optional, default to 1.0)
-        SETFLOAT(args + 3, luaL_checknumber(L, 4));
-    }
-    else {
-        SETFLOAT(args + 3, 1.0f);
-    }
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_set_color"), 4, args);
+    plugdata_draw_args(L, "lua_set_color", "fffF", 1.0);
     return 0;
 }
 
-static int fill_ellipse(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_ellipse"), 4, args);
+static int fill_ellipse(lua_State *L) {
+    plugdata_draw_args(L, "lua_fill_ellipse", "ffff");
     return 0;
 }
 
-static int stroke_ellipse(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // width
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_ellipse"), 5, args);
+static int stroke_ellipse(lua_State *L) {
+    plugdata_draw_args(L, "lua_stroke_ellipse", "ffffF", 1.0);
     return 0;
 }
 
-static int fill_all(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_fill_all"), 0, NULL);
+static int fill_all(lua_State *L) {
+    plugdata_draw_args(L, "lua_fill_all", "");
     return 0;
 }
 
-static int fill_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[4];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_rect"), 4, args);
+static int fill_rect(lua_State *L) {
+    plugdata_draw_args(L, "lua_fill_rect", "ffff");
     return 0;
 }
 
-static int stroke_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner_radius
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rect"), 5, args);
+static int stroke_rect(lua_State *L) {
+    plugdata_draw_args(L, "lua_stroke_rect", "ffffF", 1.0f);
     return 0;
 }
 
-static int fill_rounded_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner radius
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_fill_rounded_rect"), 5, args);
+static int fill_rounded_rect(lua_State *L) {
+    plugdata_draw_args(L, "lua_fill_rounded_rect", "fffff");
     return 0;
 }
 
-static int stroke_rounded_rect(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[6];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // corner_radius
-    SETFLOAT(args + 5, luaL_checknumber(L, 6)); // width
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_stroke_rounded_rect"), 6, args);
+static int stroke_rounded_rect(lua_State *L) {
+    plugdata_draw_args(L, "lua_stroke_rounded_rect", "fffffF", 1.0f);
     return 0;
 }
 
-static int draw_line(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_atom args[5];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // x
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // y
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // w
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // h
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // line width
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_line"), 5, args);
-
+static int draw_line(lua_State *L) {
+    plugdata_draw_args(L, "lua_draw_line", "ffffF", 1.0f);
     return 0;
 }
 
-static int draw_text(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    const char* text = luaL_checkstring(L, 1);
-    t_atom args[5];
-    SETSYMBOL(args, gensym(text));
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
-    SETFLOAT(args + 3, luaL_checknumber(L, 4)); // w
-    SETFLOAT(args + 4, luaL_checknumber(L, 5)); // h
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_text"), 5, args);
+static int draw_text(lua_State *L) {
+    plugdata_draw_args(L, "lua_draw_text", "sfffFF", 12.f, 0.0f);
     return 0;
 }
 
-static int draw_svg(lua_State* L) {
+static int draw_svg(lua_State *L) {
+    plugdata_draw_args(L, "lua_draw_svg", "sff");
+    return 0;
+}
+
+static int draw_image(lua_State *L) {
+    plugdata_draw_args(L, "lua_draw_image", "sff");
+    return 0;
+}
+
+static int stroke_path(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
-    t_atom args[3];
-    SETSYMBOL(args, gensym(luaL_checkstring(L, 1)));
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // x
-    SETFLOAT(args + 2, luaL_checknumber(L, 3)); // y
-
-    plugdata_draw(gfx->object, gfx->current_layer, gensym("lua_draw_svg"), 3, args);
-}
-
-static int stroke_path(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-
-    t_canvas *cnv = glist_getcanvas(obj->canvas);
-
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
-    int stroke_width = luaL_checknumber(L, 2) * glist_getzoom(cnv);
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+    int stroke_width = luaL_optnumber(L, 2, 1.0f) * glist_getzoom(cnv); // optional, default to 1.0
 
     int coordinates_size = (2 * path->num_path_segments + 2) * sizeof(t_atom);
     t_atom* coordinates = getbytes(coordinates_size);
@@ -504,19 +467,19 @@ static int stroke_path(lua_State* L) {
     return 0;
 }
 
-static int fill_path(lua_State* L) {
+static int fill_path(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
 
     int coordinates_size = (2 * path->num_path_segments + 2) * sizeof(t_atom);
     t_atom* coordinates = getbytes(coordinates_size);
-    
+
     for (int i = 0; i < path->num_path_segments; i++) {
-        float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];        
+        float x = path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
         SETFLOAT(coordinates + (i * 2), x);
         SETFLOAT(coordinates + (i * 2) + 1, y);
     }
@@ -527,37 +490,30 @@ static int fill_path(lua_State* L) {
     return 0;
 }
 
-static int translate(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    t_atom args[2];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // tx
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // ty
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_translate"), 2, args);
+static int translate(lua_State *L) {
+    plugdata_draw_args(L, "lua_translate", "ff");
     return 0;
 }
 
-static int scale(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    t_atom args[2];
-    SETFLOAT(args, luaL_checknumber(L, 1)); // sx
-    SETFLOAT(args + 1, luaL_checknumber(L, 2)); // sy
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_scale"), 2, args);
+static int scale(lua_State *L) {
+    plugdata_draw_args(L, "lua_scale", "ff");
     return 0;
 }
 
-static int reset_transform(lua_State* L) {
-    t_pdlua_gfx *gfx = pop_graphics_context(L);
-    t_pdlua *obj = gfx->object;
-    plugdata_draw(obj, gfx->current_layer, gensym("lua_reset_transform"), 0, NULL);
+static int reset_transform(lua_State *L) {
+    plugdata_draw_args(L, "lua_reset_transform", "");
     return 0;
 }
+
 #else
 
 static unsigned long long custom_rand() {
     // We use a custom random function to ensure proper randomness across all OS
+#ifdef LUA_USE_JIT // Make sure they use different random seeds, to prevent name clashes
+    static unsigned long long seed = 1;
+#else
     static unsigned long long seed = 0;
+#endif
     const unsigned long long a = 1664525;
     const unsigned long long c = 1013904223;
     const unsigned long long m = 4294967296;  // 2^32
@@ -583,7 +539,33 @@ static void generate_random_id(char *str, size_t len) {
     str[len - 1] = '\0';
 }
 
-static void transform_size(t_pdlua_gfx *gfx, int* w, int* h) {
+#ifndef PURR_DATA
+static void pdlua_sweep_image_cache(t_pdlua_gfx *gfx)
+{
+    int i = 0;
+    while (i < gfx->num_images) {
+        uint32_t age = gfx->paint_generation - gfx->images_last_used[i];
+        if (gfx->num_images > 15 && age > 5) { // If we have too many images, delete all images that havn't been drawn in 5 frames
+            char image_name[64];
+            snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)gfx->images[i]);
+            pdgui_vmess(0, "rrs", "image", "delete", image_name);
+
+            // Swap with last entry and shrink
+            gfx->images[i] = gfx->images[gfx->num_images - 1];
+            gfx->images_last_used[i] = gfx->images_last_used[gfx->num_images - 1];
+
+            gfx->images = resizebytes(gfx->images, gfx->num_images * sizeof(uint64_t), (gfx->num_images - 1) * sizeof(uint64_t));
+            gfx->images_last_used = resizebytes(gfx->images_last_used, gfx->num_images * sizeof(uint32_t), (gfx->num_images - 1) * sizeof(uint32_t));
+            gfx->num_images--;
+        } else {
+            i++;
+        }
+    }
+}
+#endif
+
+
+static void transform_size(t_pdlua_gfx *gfx, int *w, int *h) {
     for(int i = gfx->num_transforms - 1; i >= 0; i--)
     {
         if(gfx->transforms[i].type == SCALE)
@@ -594,7 +576,7 @@ static void transform_size(t_pdlua_gfx *gfx, int* w, int* h) {
     }
 }
 
-static void transform_point(t_pdlua_gfx *gfx, int* x, int* y) {
+static void transform_point(t_pdlua_gfx *gfx, int *x, int *y) {
     for(int i = gfx->num_transforms - 1; i >= 0; i--)
     {
         if(gfx->transforms[i].type == SCALE)
@@ -610,7 +592,7 @@ static void transform_point(t_pdlua_gfx *gfx, int* x, int* y) {
     }
 }
 
-static void transform_size_float(t_pdlua_gfx *gfx, float* w, float* h) {
+static void transform_size_float(t_pdlua_gfx *gfx, float *w, float *h) {
     for(int i = gfx->num_transforms - 1; i >= 0; i--)
     {
         if(gfx->transforms[i].type == SCALE)
@@ -621,7 +603,7 @@ static void transform_size_float(t_pdlua_gfx *gfx, float* w, float* h) {
     }
 }
 
-static void transform_point_float(t_pdlua_gfx *gfx, float* x, float* y) {
+static void transform_point_float(t_pdlua_gfx *gfx, float *x, float *y) {
     for(int i = gfx->num_transforms - 1; i >= 0; i--)
     {
         if(gfx->transforms[i].type == SCALE)
@@ -650,7 +632,7 @@ static void transform_point_float(t_pdlua_gfx *gfx, float* x, float* y) {
 #define glist_eraseiofor xxglist_eraseiofor
 
     /* draw inlets and outlets for a text object or for a graph. */
-void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
+static void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
     char *tag, int x1, int y1, int x2, int y2)
 {
   t_canvas *canvas = glist_getcanvas(glist);
@@ -727,7 +709,7 @@ void glist_drawiofor(t_glist *glist, t_object *ob, int firsttime,
   }
 }
 
-void glist_eraseiofor(t_glist *glist, t_object *ob, char *tag)
+static void glist_eraseiofor(t_glist *glist, t_object *ob, char *tag)
 {
   char tagbuf[MAXPDSTRING];
   t_canvas *canvas = glist_getcanvas(glist);
@@ -750,7 +732,7 @@ static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed) {
     t_pdlua_gfx *gfx = &obj->gfx;
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 #ifndef PURR_DATA
-    
+
     if(layer < gfx->num_layers) {
         pdgui_vmess(0, "crs", cnv, "delete", layer == -1 ? gfx->object_tag : gfx->layer_tags[layer]);
     }
@@ -777,7 +759,7 @@ static void pdlua_gfx_clear(t_pdlua *obj, int layer, int removed) {
     glist_eraseiofor(obj->canvas, &obj->pd, gfx->object_tag);
 }
 
-static void get_bounds_args(lua_State* L, t_pdlua *obj, int* x1, int* y1, int* x2, int* y2) {
+static void get_bounds_args(lua_State *L, t_pdlua *obj, int *x1, int *y1, int *x2, int *y2) {
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
     int x = luaL_checknumber(L, 1);
@@ -815,7 +797,7 @@ static void gfx_displace(t_pdlua *x, t_glist *glist, int dx, int dy)
     glist_drawiofor(x->canvas, (t_object*)x, 0, x->gfx.object_tag, xpos, ypos, xpos + (x->gfx.width * scale), ypos + (x->gfx.height * scale));
 }
 
-static const char* register_drawing(t_pdlua_gfx *gfx)
+static const char *register_drawing(t_pdlua_gfx *gfx)
 {
     generate_random_id(gfx->current_item_tag, 64);
     return gfx->current_item_tag;
@@ -837,17 +819,17 @@ static int gfx_initialize(t_pdlua *obj)
     gfx->transforms = NULL;
     gfx->num_transforms = 0;
     gfx->num_layers = 0;
+    gfx->first_draw = 0;
     gfx->layer_tags = NULL;
-    
-    pdlua_gfx_repaint(obj, 0);
+    gfx->mouse_inside = 0;
+
     return 0;
 }
 
-static int set_size(lua_State* L)
+static int set_size(lua_State *L)
 {
-    if (!lua_islightuserdata(L, 1)) {
+    if (!lua_islightuserdata(L, 1))
         return 0;
-    }
 
     t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
     obj->gfx.width = luaL_checknumber(L, 2);
@@ -859,14 +841,14 @@ static int set_size(lua_State* L)
     return 0;
 }
 
-static int start_paint(lua_State* L) {
+static int start_paint(lua_State *L) {
     if (!lua_islightuserdata(L, 1)) {
         lua_pushnil(L);
         return 1;
     }
 
-    t_pdlua* obj = (t_pdlua*)lua_touserdata(L, 1);
-    
+    t_pdlua *obj = (t_pdlua*)lua_touserdata(L, 1);
+
     t_pdlua_gfx *gfx = &obj->gfx;
     if(gfx->object_tag[0] == '\0')
     {
@@ -912,7 +894,7 @@ static int start_paint(lua_State* L) {
                 gfx->layer_tags = resizebytes(gfx->layer_tags, sizeof(char*) * gfx->num_layers, sizeof(char*) * new_num_layers);
             else
                 gfx->layer_tags = getbytes(sizeof(char*));
-            
+
             gfx->layer_tags[layer] = getbytes(64);
             snprintf(gfx->layer_tags[layer], 64, ".l%i%lx", layer, (long)obj);
             gfx->num_layers = new_num_layers;
@@ -936,12 +918,13 @@ static int start_paint(lua_State* L) {
         }
 #endif
         gfx->current_layer_tag = gfx->layer_tags[layer];
-        
+
         if(gfx->transforms) freebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform));
         gfx->num_transforms = 0;
         gfx->transforms = NULL;
 
-        lua_pushlightuserdata(L, gfx);
+        t_pdlua_gfx **ud = (t_pdlua_gfx**)lua_newuserdata(L, sizeof(t_pdlua_gfx*));
+        *ud = &obj->gfx;
         luaL_setmetatable(L, "GraphicsContext");
 
 #ifndef PURR_DATA
@@ -956,7 +939,7 @@ static int start_paint(lua_State* L) {
             t_canvas *cnv = glist_getcanvas(obj->canvas);
             generate_random_id(gfx->order_tag, 64);
 
-            const char* tags[] = { gfx->order_tag };
+            const char *tags[] = { gfx->order_tag };
             pdgui_vmess(0, "crr iiii ri rS", cnv, "create", "line", 0, 0, 0, 0,
                         "-width", 1, "-tags", 1, tags);
         }
@@ -992,27 +975,27 @@ static int start_paint(lua_State* L) {
     return 1;
 }
 
-static int end_paint(lua_State* L) {
+static int end_paint(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = (t_pdlua*)gfx->object;
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
     int scale = glist_getzoom(glist_getcanvas(obj->canvas));
     int layer = luaL_checknumber(L, 1) - 1;
-    
+
     // Draw iolets on top
     int xpos = text_xpix((t_object*)obj, obj->canvas);
     int ypos = text_ypix((t_object*)obj, obj->canvas);
 
     // TODO: I don't think we need to call drawiofor on each layer?
     glist_drawiofor(obj->canvas, (t_object*)obj, 1, gfx->object_tag, xpos, ypos, xpos + (gfx->width * scale), ypos + (gfx->height * scale));
-    
+
 #ifndef PURR_DATA
     if(!gfx->first_draw && gfx->order_tag[0] != '\0') {
-        
+
         // Move everything to below the order marker, to make sure redrawn stuff isn't always on top
         pdgui_vmess(0, "crss", cnv, "lower", gfx->object_tag, gfx->order_tag);
-        
+
         if(layer == 0 && gfx->num_layers > 1)
         {
             if(layer < gfx->num_layers) pdgui_vmess(0, "crss", cnv, "lower", gfx->current_layer_tag, gfx->layer_tags[layer + 1]);
@@ -1021,45 +1004,26 @@ static int end_paint(lua_State* L) {
             pdgui_vmess(0, "crss", cnv, "raise", gfx->current_layer_tag, gfx->layer_tags[layer - 1]);
         }
     }
+    if(layer == 0) gfx->paint_generation++; // Currently, image cleanup only happens on a full repaint. This could be improved
+    pdlua_sweep_image_cache(gfx);
 #endif
 
     return 0;
 }
 
-static int set_color(lua_State* L) {
+static int set_color(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
 
-    int r, g, b;
-    if (lua_gettop(L) == 1) { // Single argument: parse as color ID instead of RGB
-        int color_id = luaL_checknumber(L, 1);
-        if(color_id != 1)
-        {
-            r = 255;
-            g = 255;
-            b = 255;
-        }
-        else {
-            r = 0;
-            g = 0;
-            b = 0;
-        }
-    }
-    else {
-        r = luaL_checknumber(L, 1);
-        g = luaL_checknumber(L, 2);
-        b = luaL_checknumber(L, 3);
-    }
-
+    int r = luaL_checknumber(L, 1);
+    int g = luaL_checknumber(L, 2);
+    int b = luaL_checknumber(L, 3);
 #ifndef PURR_DATA
     // AFAIK, alpha is not supported in tcl/tk
     snprintf(gfx->current_color, 8, "#%02X%02X%02X", r, g, b);
     gfx->current_color[7] = '\0';
 #else
     // ... but it is in Purr Data (nw.js gui)
-    int a = 255;
-    if (lua_gettop(L) >= 4) {
-        a = luaL_checknumber(L, 4)*255;
-    }
+    int a = luaL_optnumber(L, 4, 1.0f) * 255;
     snprintf(gfx->current_color, 10, "#%02X%02X%02X%02X", r, g, b, a);
     gfx->current_color[9] = '\0';
 #endif
@@ -1067,7 +1031,7 @@ static int set_color(lua_State* L) {
     return 0;
 }
 
-static int fill_ellipse(lua_State* L) {
+static int fill_ellipse(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1076,7 +1040,7 @@ static int fill_ellipse(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii rs ri rS", cnv, "create", "oval", x1, y1, x2, y2, "-fill", gfx->current_color, "-width", 0, "-tags", 3, tags);
@@ -1093,7 +1057,7 @@ static int fill_ellipse(lua_State* L) {
     return 0;
 }
 
-static int stroke_ellipse(lua_State* L) {
+static int stroke_ellipse(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1102,9 +1066,9 @@ static int stroke_ellipse(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    int line_width = luaL_checknumber(L, 5) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 5, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "oval", x1, y1, x2, y2, "-width", line_width, "-outline", gfx->current_color, "-tags", 3, tags);
@@ -1119,7 +1083,7 @@ static int stroke_ellipse(lua_State* L) {
     return 0;
 }
 
-static int fill_all(lua_State* L) {
+static int fill_all(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1130,10 +1094,10 @@ static int fill_all(lua_State* L) {
     int x2 = x1 + gfx->width * glist_getzoom(cnv);
     int y2 = y1 + gfx->height * glist_getzoom(cnv);
 
-    const char* tags[] =  { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] =  { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
-    pdgui_vmess(0, "crr iiii rs rS", cnv, "create", "rectangle", x1, y1, x2, y2, "-fill", gfx->current_color, "-tags", 3, tags);
+    pdgui_vmess(0, "crr iiii rs rk ri rS", cnv, "create", "rectangle", x1, y1, x2, y2, "-fill", gfx->current_color, "-outline", gfx->is_selected ? THISGUI->i_selectcolor : THISGUI->i_foregroundcolor, "-width",     glist_getzoom(cnv), "-tags", 3, tags);
 #else // PURR_DATA
     gui_vmess("gui_luagfx_fill_all", "xsssiiii", cnv, tags[2], tags[1],
               gfx->current_color,
@@ -1143,7 +1107,7 @@ static int fill_all(lua_State* L) {
     return 0;
 }
 
-static int fill_rect(lua_State* L) {
+static int fill_rect(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1152,7 +1116,7 @@ static int fill_rect(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii rs ri rS", cnv, "create", "rectangle", x1, y1, x2, y2, "-fill", gfx->current_color, "-width", 0, "-tags", 3, tags);
@@ -1167,7 +1131,7 @@ static int fill_rect(lua_State* L) {
     return 0;
 }
 
-static int stroke_rect(lua_State* L) {
+static int stroke_rect(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1176,9 +1140,9 @@ static int stroke_rect(lua_State* L) {
     int x1, y1, x2, y2;
     get_bounds_args(L, obj, &x1, &y1, &x2, &y2);
 
-    int line_width = luaL_checknumber(L, 5) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 5, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "rectangle", x1, y1, x2, y2, "-width", line_width, "-outline", gfx->current_color, "-tags", 3, tags);
@@ -1193,7 +1157,7 @@ static int stroke_rect(lua_State* L) {
     return 0;
 }
 
-static int fill_rounded_rect(lua_State* L) {
+static int fill_rounded_rect(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1208,7 +1172,7 @@ static int fill_rounded_rect(lua_State* L) {
 
     transform_size(gfx, &radius_x, &radius_y);
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     // Tcl/tk can't fill rounded rectangles, so we draw 2 smaller rectangles with 4 ovals over the corners
@@ -1216,7 +1180,7 @@ static int fill_rounded_rect(lua_State* L) {
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "oval", x2 - radius_x * 2 , y1, x2, y1 + radius_y * 2, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "oval", x1, y2 - radius_y * 2, x1 + radius_x * 2, y2, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "oval", x2 - radius_x * 2, y2 - radius_y * 2, x2, y2, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
-    pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "rectangle", x1 + radius_x, y1, x2 - radius_x, y2, "-width", 0, "-fill", gfx->current_color, "-tag", 3, tags);
+    pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "rectangle", x1 + radius_x, y1, x2 - radius_x, y2, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "rectangle", x1, y1 + radius_y, x2, y2 - radius_y, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
 #else // PURR_DATA
     int x0 = text_xpix((t_object*)obj, obj->canvas);
@@ -1230,7 +1194,7 @@ static int fill_rounded_rect(lua_State* L) {
     return 0;
 }
 
-static int stroke_rounded_rect(lua_State* L) {
+static int stroke_rounded_rect(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1243,9 +1207,9 @@ static int stroke_rounded_rect(lua_State* L) {
     int radius_x = radius * glist_getzoom(cnv);
     int radius_y = radius * glist_getzoom(cnv);
     transform_size(gfx, &radius_x, &radius_y);
-    int line_width = luaL_checknumber(L, 6) * glist_getzoom(cnv);
+    int line_width = luaL_optnumber(L, 6, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     // Tcl/tk can't stroke rounded rectangles either, so we draw 2 lines connecting with 4 arcs at the corners
@@ -1279,7 +1243,7 @@ static int stroke_rounded_rect(lua_State* L) {
     return 0;
 }
 
-static int draw_line(lua_State* L) {
+static int draw_line(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
@@ -1289,7 +1253,7 @@ static int draw_line(lua_State* L) {
     int y1 = luaL_checknumber(L, 2);
     int x2 = luaL_checknumber(L, 3);
     int y2 = luaL_checknumber(L, 4);
-    int line_width = luaL_checknumber(L, 5);
+    int line_width = luaL_optnumber(L, 5, 1.0f); // line width (optional, default to 1.0)
 
     transform_point(gfx, &x1, &y1);
     transform_point(gfx, &x2, &y2);
@@ -1307,7 +1271,7 @@ static int draw_line(lua_State* L) {
     y2 *= canvas_zoom;
     line_width *= canvas_zoom;
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "line", x1, y1, x2, y2,
@@ -1323,18 +1287,19 @@ static int draw_line(lua_State* L) {
     return 0;
 }
 
-static int draw_text(lua_State* L) {
+static int draw_text(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
-    const char* text = luaL_checkstring(L, 1); // Assuming text is a string
+    const char *text = luaL_checkstring(L, 1); // Assuming text is a string
     int x = luaL_checknumber(L, 2);
     int y = luaL_checknumber(L, 3);
     int w = luaL_checknumber(L, 4);
-    int font_height = luaL_checknumber(L, 5);
-    font_height = sys_hostfontsize(font_height, glist_getzoom(cnv));
+    // default to standard font size
+    int font_height = sys_hostfontsize(luaL_optnumber(L, 5, glist_getfont(cnv)), glist_getzoom(cnv));
+    int alignment = luaL_optinteger(L, 6, 0); // Defaults to TOP_LEFT
 
     transform_point(gfx, &x, &y);
     transform_size(gfx, &w, &font_height);
@@ -1347,15 +1312,29 @@ static int draw_text(lua_State* L) {
     y *= canvas_zoom;
     w *= canvas_zoom;
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
+    // Convert alignment value to tcl/tk anchor point
+    const char *anchor;
+    switch (alignment) {
+        case 1:  anchor = "n"; break;      // TOP_CENTER
+        case 2:  anchor = "ne"; break;     // TOP_RIGHT
+        case 3:  anchor = "w"; break;      // CENTER_LEFT
+        case 4:  anchor = "center"; break; // CENTER
+        case 5:  anchor = "e"; break;      // CENTER_RIGHT
+        case 6:  anchor = "sw"; break;     // BOTTOM_LEFT
+        case 7:  anchor = "s"; break;      // BOTTOM_CENTER
+        case 8:  anchor = "se"; break;     // BOTTOM_RIGHT
+        default: anchor = "nw"; break;     // TOP_LEFT
+    }
+
     pdgui_vmess(0, "crr ii rs ri rs rS", cnv, "create", "text",
-                0, 0, "-anchor", "nw", "-width", w, "-text", text, "-tags", 3, tags);
+                0, 0, "-anchor", anchor, "-width", w, "-text", text, "-tags", 3, tags);
 
     t_atom fontatoms[3];
     SETSYMBOL(fontatoms+0, gensym(sys_font));
-    SETFLOAT (fontatoms+1, -font_height); // Size is wrong on hi-dpi Windows is this is not negative
+    SETFLOAT (fontatoms+1, -font_height); // Size is wrong on hi-dpi Windows if this is not negative
     SETSYMBOL(fontatoms+2, gensym(sys_fontweight));
 
     pdgui_vmess(0, "crs rA rs rs", cnv, "itemconfigure", tags[1],
@@ -1428,34 +1407,33 @@ static char *pdlua_base64_encode(const unsigned char *data,
     return encoded_data;
 }
 
-static int draw_svg(lua_State* L) {
+static int draw_svg(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
     int canvas_zoom = glist_getzoom(cnv);
-    
+
     // We can only apply scaling with an equal aspect ratio, so we only use the first scale coordinate
     float scale_x = canvas_zoom, scale_y = canvas_zoom;
     transform_size_float(gfx, &scale_x, &scale_y);
     float scale = (scale_x + scale_y) * 0.5f;
-    
-    char* svg_text = strdup(luaL_checkstring(L, 1));
+
+    char *svg_text = strdup(luaL_checkstring(L, 1));
     uint64_t svg_hash = pdlua_image_hash((unsigned char*)svg_text, scale);
-    
+
     int x = luaL_checknumber(L, 2);
     int y = luaL_checknumber(L, 3);
-    
+
     transform_point(gfx, &x, &y);
 
-    
     x += text_xpix((t_object*)obj, obj->canvas) / canvas_zoom;
     y += text_ypix((t_object*)obj, obj->canvas) / canvas_zoom;
 
     x *= canvas_zoom;
     y *= canvas_zoom;
-    
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     // See if we already rendered the same svg text at the same size, if so, reuse that image
@@ -1464,55 +1442,56 @@ static int draw_svg(lua_State* L) {
         if(gfx->images[i] == svg_hash)
         {
             char image_name[64];
-            snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, svg_hash);
+            snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)svg_hash);
             pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y, "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
+            gfx->images_last_used[i] = gfx->paint_generation;
             return 0;
         }
     }
 
     // First parse svg text with nanosvg
-    struct NSVGimage* image = nsvgParse(svg_text, "px", 96);
+    struct NSVGimage *image = nsvgParse(svg_text, "px", 96);
     if (!image) {
-        pd_error(0, "[pdlua]: Failed to parse SVG data.");
+        pd_error(0, "[pdlua] draw_svg: Failed to parse SVG data.");
         return 0;
     }
 
     // Then rasterize to a bitmap image
-    struct NSVGrasterizer* rast = nsvgCreateRasterizer();
+    struct NSVGrasterizer *rast = nsvgCreateRasterizer();
     if (!rast) {
-        pd_error(0, "[pdlua]: Failed to create rasterizer.");
+        pd_error(0, "[pdlua] draw_svg: Failed to create rasterizer.");
         return 0;
     }
-    
+
     const int channels = 4;
     // Apply scale, limit size to object size
     // This is not perfect clipping, but it at least prevents accidental large images from freezing pd
     int w = (int)fmax(image->width * scale, gfx->width * canvas_zoom);
     int h = (int)fmax(image->height* scale, gfx->height * canvas_zoom);
     int image_size = w * h * channels;
-    
-    unsigned char* bitmap_data = getbytes(image_size);
+
+    unsigned char *bitmap_data = getbytes(image_size);
     if (!bitmap_data) {
-        pd_error(0, "[pdlua]: Failed to allocate memory for bitmap.");
+        pd_error(0, "[pdlua] draw_svg: Failed to allocate memory for bitmap.");
         return 0;
     }
 
     nsvgRasterize(rast, image, 0, 0, scale, bitmap_data, w, h, w * channels);
-    
+
     // Convert bitmap data to png
     int png_size;
-    unsigned char* png_buf = stbi_write_png_to_mem(bitmap_data, w * channels, w, h, channels, &png_size);
+    unsigned char *png_buf = stbi_write_png_to_mem(bitmap_data, w * channels, w, h, channels, &png_size);
     if (!png_buf || png_size <= 0) {
-        pd_error(0, "[pdlua]: Failed to encode PNG image.");
+        pd_error(0, "[pdlua] draw_svg: Failed to encode PNG image.");
         return 0;
     }
-    
+
     // Encode PNG data to Base64
-    char* encoded_png = pdlua_base64_encode((unsigned char*)png_buf, png_size);
+    char *encoded_png = pdlua_base64_encode((unsigned char*)png_buf, png_size);
     free(png_buf);
-    
+
     if (!encoded_png) {
-        pd_error(0, "[pdlua]: Failed to encode PNG to Base64.");
+        pd_error(0, "[pdlua] draw_svg: Failed to encode PNG to Base64.");
         return 0;
     }
 
@@ -1520,19 +1499,22 @@ static int draw_svg(lua_State* L) {
     if(gfx->num_images == 0)
     {
         gfx->images = getbytes(sizeof(uint64_t));
+        gfx->images_last_used = getbytes(sizeof(uint32_t));
     }
     else {
         gfx->images = resizebytes(gfx->images, gfx->num_images*sizeof(uint64_t), (gfx->num_images+1) * sizeof(uint64_t));
+        gfx->images_last_used = resizebytes(gfx->images_last_used, gfx->num_images*sizeof(uint32_t), (gfx->num_images+1) * sizeof(uint32_t));
     }
 
     gfx->images[gfx->num_images] = svg_hash;
+    gfx->images_last_used[gfx->num_images] = gfx->paint_generation;
     gfx->num_images++;
 
     char image_name[64];
-    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, svg_hash);
+    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)svg_hash);
     pdgui_vmess(0, "rrr s rs", "image", "create", "photo", image_name, "-data", encoded_png);
     pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y, "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
-    
+
     // Cleanup
     free(encoded_png);
     free(svg_text);
@@ -1543,30 +1525,192 @@ static int draw_svg(lua_State* L) {
     return 0;
 }
 
+static int draw_image(lua_State *L) {
+    t_pdlua_gfx *gfx = pop_graphics_context(L);
+    t_pdlua *obj = gfx->object;
 
-static int stroke_path(lua_State* L) {
+    t_canvas *cnv = glist_getcanvas(obj->canvas);
+    int canvas_zoom = glist_getzoom(cnv);
+
+    float scale_x = canvas_zoom, scale_y = canvas_zoom;
+    transform_size_float(gfx, &scale_x, &scale_y);
+    float scale = (scale_x + scale_y) * 0.5f;
+
+    const char *image_path = luaL_checkstring(L, 1);
+    int x = luaL_checknumber(L, 2);
+    int y = luaL_checknumber(L, 3);
+
+    uint64_t image_hash = pdlua_image_hash((unsigned char*)image_path, scale);
+
+    transform_point(gfx, &x, &y);
+    x += text_xpix((t_object*)obj, obj->canvas) / canvas_zoom;
+    y += text_ypix((t_object*)obj, obj->canvas) / canvas_zoom;
+    x *= canvas_zoom;
+    y *= canvas_zoom;
+
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+
+    char image_name[64];
+    snprintf(image_name, 64, ".x%llupix%llu", (unsigned long long)gfx, (unsigned long long)image_hash);
+
+#ifndef PURR_DATA
+    // Fast path: scaled image already uploaded to Tk
+    for (int i = 0; i < gfx->num_images; i++) {
+        if (gfx->images[i] == image_hash) {
+            pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y,
+                        "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
+            gfx->images_last_used[i] = gfx->paint_generation;
+            return 0;
+        }
+    }
+
+    // Locate the file through Pd's search path
+    char dirresult[MAXPDSTRING];
+    char *nameresult = NULL;
+    int fd = canvas_open(obj->canvas, image_path, "",
+                         dirresult, &nameresult, MAXPDSTRING, 0);
+    if (fd < 0) {
+        pd_error(obj, "[pdlua] draw_image: cannot open '%s'", image_path);
+        return 0;
+    }
+
+    FILE *fp = fdopen(fd, "rb");
+    if (!fp) {
+        pd_error(obj, "[pdlua] draw_image: fdopen failed");
+        sys_close(fd);
+        return 0;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    if (file_size <= 0) {
+        pd_error(obj, "[pdlua] draw_image: empty file '%s'", image_path);
+        fclose(fp);
+        return 0;
+    }
+
+    unsigned char *file_data = getbytes((size_t)file_size);
+    if (!file_data) {
+        pd_error(obj, "[pdlua] draw_image: out of memory");
+        fclose(fp);
+        return 0;
+    }
+
+    if ((long)fread(file_data, 1, (size_t)file_size, fp) != file_size) {
+        pd_error(obj, "[pdlua] draw_image: read error for '%s'", image_path);
+        freebytes(file_data, (size_t)file_size);
+        fclose(fp);
+        return 0;
+    }
+    fclose(fp);
+
+    // Decode image with stb_image (handles PNG, JPG, GIF, BMP, etc)
+    int src_w, src_h, channels;
+    unsigned char *src_pixels = stbi_load_from_memory(file_data, (int)file_size,
+                                                       &src_w, &src_h, &channels, 4);
+    freebytes(file_data, (size_t)file_size);
+
+    if (!src_pixels) {
+        pd_error(obj, "[pdlua] draw_image: stb_image decode failed for '%s': %s",
+                 image_path, stbi_failure_reason());
+        return 0;
+    }
+
+    // Compute scaled dimensions
+    int dst_w = (int)(src_w * scale + 0.5f);
+    int dst_h = (int)(src_h * scale + 0.5f);
+    if (dst_w < 1) dst_w = 1;
+    if (dst_h < 1) dst_h = 1;
+
+    unsigned char *dst_pixels = NULL;
+
+    if (dst_w == src_w && dst_h == src_h) {
+        // No resize needed, use source directly
+        dst_pixels = src_pixels;
+    } else {
+        dst_pixels = getbytes(dst_w * dst_h * 4);
+        if (!dst_pixels) {
+            pd_error(obj, "[pdlua] draw_image: out of memory for resized buffer");
+            stbi_image_free(src_pixels);
+            return 0;
+        }
+
+        // stbir_resize_uint8_linear gives a proper box/bilinear filtered result
+        stbir_resize_uint8_linear(src_pixels, src_w, src_h, 0,
+                                   dst_pixels, dst_w, dst_h, 0, STBIR_RGBA);
+        stbi_image_free(src_pixels);
+    }
+
+    // Encode to PNG → Base64 → Tk photo image (same path as draw_svg)
+    int png_size;
+    unsigned char *png_buf = stbi_write_png_to_mem(dst_pixels, dst_w * 4,
+                                                    dst_w, dst_h, 4, &png_size);
+    if (dst_pixels != src_pixels)
+        freebytes(dst_pixels, dst_w * dst_h * 4);
+    else
+        stbi_image_free(src_pixels);
+
+    if (!png_buf || png_size <= 0) {
+        pd_error(obj, "[pdlua] draw_image: PNG encode failed");
+        return 0;
+    }
+
+    char *encoded = pdlua_base64_encode(png_buf, (size_t)png_size);
+    free(png_buf);
+
+    if (!encoded) {
+        pd_error(obj, "[pdlua] draw_image: base64 encode failed");
+        return 0;
+    }
+
+    pdgui_vmess(0, "rrr s rs",  "image", "create", "photo", image_name, "-data", encoded);
+    pdgui_vmess(0, "crr ii rs rr rS", cnv, "create", "image", x, y,
+                "-image", image_name, "-anchor", "nw", "-tags", 3, tags);
+    free(encoded);
+
+    // Cache the scaled hash
+    if (gfx->num_images == 0) {
+        gfx->images = getbytes(sizeof(uint64_t));
+        gfx->images_last_used = getbytes(sizeof(uint32_t));
+    }
+    else {
+        gfx->images = resizebytes(gfx->images, gfx->num_images * sizeof(uint64_t), (gfx->num_images + 1) * sizeof(uint64_t));
+        gfx->images_last_used = resizebytes(gfx->images_last_used, gfx->num_images * sizeof(uint32_t), (gfx->num_images + 1) * sizeof(uint32_t));
+    }
+
+    gfx->images_last_used[gfx->num_images] = gfx->paint_generation;
+    gfx->images[gfx->num_images] = image_hash;
+    gfx->num_images++;
+
+#else
+    // TODO: purr-data
+#endif
+    return 0;
+}
+
+static int stroke_path(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     if(path->num_path_segments < 3)
-    {
         return 0;
-    }
 
-    int stroke_width = luaL_checknumber(L, 2) * glist_getzoom(cnv);
+    int stroke_width = luaL_optnumber(L, 2, 1.0f) * glist_getzoom(cnv); // stroke width (optional, default to 1.0)
     int obj_x = text_xpix((t_object*)obj, obj->canvas);
     int obj_y = text_ypix((t_object*)obj, obj->canvas);
     int canvas_zoom = glist_getzoom(cnv);
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "line", 0, 0, 0, 0, "-width", stroke_width, "-fill", gfx->current_color, "-tags", 3, tags);
-    
-    t_float* transformed_coordinates = getbytes(path->num_path_segments * 2 * sizeof(t_float));
+
+    t_float *transformed_coordinates = getbytes(path->num_path_segments * 2 * sizeof(t_float));
     for (int i = 0; i < path->num_path_segments; i++) {
         float x =  path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
         transform_point_float(gfx, &x, &y);
@@ -1575,7 +1719,7 @@ static int stroke_path(lua_State* L) {
     }
     pdgui_vmess(0, "crs F", cnv, "coords", tags[1], path->num_path_segments*2, transformed_coordinates);
     freebytes(transformed_coordinates, path->num_path_segments * 2 * sizeof(t_float));
-    
+
 #else // PURR_DATA
     gui_start_vmess("gui_luagfx_stroke_path", "xsssi", cnv, tags[2], tags[1],
                     gfx->current_color, stroke_width);
@@ -1593,29 +1737,27 @@ static int stroke_path(lua_State* L) {
     return 0;
 }
 
-static int fill_path(lua_State* L) {
+static int fill_path(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     t_pdlua *obj = gfx->object;
 
     t_canvas *cnv = glist_getcanvas(obj->canvas);
 
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     if(path->num_path_segments < 3)
-    {
         return 0;
-    }
 
     // Apply transformations to all coordinates
     int obj_x = text_xpix((t_object*)obj, obj->canvas);
     int obj_y = text_ypix((t_object*)obj, obj->canvas);
     int canvas_zoom = glist_getzoom(cnv);
 
-    const char* tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
+    const char *tags[] = { gfx->object_tag, register_drawing(gfx), gfx->current_layer_tag };
 
 #ifndef PURR_DATA
     pdgui_vmess(0, "crr iiii ri rs rS", cnv, "create", "polygon", 0, 0, 0, 0, "-width", 0, "-fill", gfx->current_color, "-tags", 3, tags);
 
-    t_float* transformed_coordinates = getbytes(path->num_path_segments * 2 * sizeof(t_float));
+    t_float *transformed_coordinates = getbytes(path->num_path_segments * 2 * sizeof(t_float));
     for (int i = 0; i < path->num_path_segments; i++) {
         float x =  path->path_segments[i * 2], y = path->path_segments[i * 2 + 1];
         transform_point_float(gfx, &x, &y);
@@ -1642,19 +1784,13 @@ static int fill_path(lua_State* L) {
 }
 
 
-static int translate(lua_State* L) {
+static int translate(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
 
     if(gfx->num_transforms == 0)
-    {
         gfx->transforms = getbytes(sizeof(gfx_transform));
-
-    }
     else
-    {
         gfx->transforms = resizebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform), (gfx->num_transforms + 1) * sizeof(gfx_transform));
-
-    }
 
     gfx->transforms[gfx->num_transforms].type = TRANSLATE;
     gfx->transforms[gfx->num_transforms].x = luaL_checknumber(L, 1);
@@ -1664,7 +1800,7 @@ static int translate(lua_State* L) {
     return 0;
 }
 
-static int scale(lua_State* L) {
+static int scale(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
 
     gfx->transforms = resizebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform), (gfx->num_transforms + 1) * sizeof(gfx_transform));
@@ -1677,7 +1813,7 @@ static int scale(lua_State* L) {
     return 0;
 }
 
-static int reset_transform(lua_State* L) {
+static int reset_transform(lua_State *L) {
     t_pdlua_gfx *gfx = pop_graphics_context(L);
     freebytes(gfx->transforms, gfx->num_transforms * sizeof(gfx_transform));
     gfx->transforms = NULL;
@@ -1685,17 +1821,17 @@ static int reset_transform(lua_State* L) {
     return 0;
 }
 #endif
-static void add_path_segment(t_path_state* path, float x, float y)
+
+static void add_path_segment(t_path_state *path, float x, float y)
 {
     int path_segment_space = (path->num_path_segments + 1) * 2;
     int old_size = path->num_path_segments_allocated;
     int new_size = MAX(path_segment_space, path->num_path_segments_allocated);
-    if(!path->num_path_segments_allocated) {
+
+    if(!path->num_path_segments_allocated)
         path->path_segments = (float*)getbytes(new_size * sizeof(float));
-    }
-    else {
+    else
         path->path_segments = (float*)resizebytes(path->path_segments, old_size * sizeof(float), new_size * sizeof(float));
-    }
 
     path->num_path_segments_allocated = new_size;
 
@@ -1704,7 +1840,7 @@ static void add_path_segment(t_path_state* path, float x, float y)
     path->num_path_segments++;
 }
 
-static int start_path(lua_State* L) {
+static int start_path(lua_State *L) {
     t_path_state *path = (t_path_state *)lua_newuserdata(L, sizeof(t_path_state));
     luaL_setmetatable(L, "Path");
 
@@ -1718,16 +1854,16 @@ static int start_path(lua_State* L) {
 }
 
 // Function to add a line to the current path
-static int line_to(lua_State* L) {
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+static int line_to(lua_State *L) {
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     float x = luaL_checknumber(L, 2);
     float y = luaL_checknumber(L, 3);
     add_path_segment(path, x, y);
     return 0;
 }
 
-static int quad_to(lua_State* L) {
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+static int quad_to(lua_State *L) {
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     float x2 = luaL_checknumber(L, 2);
     float y2 = luaL_checknumber(L, 3);
     float x3 = luaL_checknumber(L, 4);
@@ -1756,8 +1892,8 @@ static int quad_to(lua_State* L) {
     return 0;
 }
 
-static int cubic_to(lua_State* L) {
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+static int cubic_to(lua_State *L) {
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     float x2 = luaL_checknumber(L, 2);
     float y2 = luaL_checknumber(L, 3);
     float x3 = luaL_checknumber(L, 4);
@@ -1790,15 +1926,15 @@ static int cubic_to(lua_State* L) {
 }
 
 // Function to close the current path
-static int close_path(lua_State* L) {
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+static int close_path(lua_State *L) {
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     add_path_segment(path, path->path_start_x, path->path_start_y);
     return 0;
 }
 
-static int free_path(lua_State* L)
+static int free_path(lua_State *L)
 {
-    t_path_state* path = (t_path_state*)luaL_checkudata(L, 1, "Path");
+    t_path_state *path = (t_path_state*)luaL_checkudata(L, 1, "Path");
     freebytes(path->path_segments, path->num_path_segments_allocated * sizeof(int));
     return 0;
 }

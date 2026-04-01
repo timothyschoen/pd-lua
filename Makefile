@@ -15,19 +15,13 @@ lib.name = pdlua
 
 pdlua_version := $(shell git describe --tags 2>/dev/null)
 
-luasrc = $(wildcard lua/onelua.c)
+luajit_dir = ./luas/luajit/src
+luajit_lib = $(luajit_dir)/libluajit.a
 
-PKG_CONFIG ?= pkg-config
+luajit_src = ./luas/luajit.c
+lua_src = ./luas/lua.c
 
-ifeq ($(luasrc),)
-# compile with installed liblua
-$(info ++++ NOTE: using installed lua)
-luaflags = $(shell $(PKG_CONFIG) --cflags lua)
-lualibs = $(shell $(PKG_CONFIG) --libs lua)
-else
-# compile with Lua submodule
-$(info ++++ NOTE: using lua submodule)
-luaflags = -DMAKE_LIB -Ilua
+luaflags = -DMAKE_LIB
 define forDarwin
 luaflags += -DLUA_USE_MACOSX
 endef
@@ -37,27 +31,35 @@ endef
 define forWindows
 luaflags += -DLUA_USE_WINDOWS
 endef
-endif
 
-cflags = ${luaflags} -DPDLUA_VERSION="$(pdlua_version)"
+# stbi and nanosvg have functions we don't use
+suppress-wunused=1
+
+cflags = $(luaflags) -DPDLUA_VERSION="$(pdlua_version)" -Iluas/luajit/src
 ifdef PD_MULTICHANNEL
     cflags += -DPD_MULTICHANNEL=$(PD_MULTICHANNEL)
 endif
 
-pdlua.class.sources := pdlua.c $(luasrc)
-pdlua.class.ldlibs := $(lualibs)
+pdlua.class.sources := $(lua_src) $(luajit_src)
+pdlua.class.ldlibs := $(luajit_lib)
 
-datafiles = pd.lua $(wildcard pdlua*-help.pd)
+datafiles = \
+	pd.lua $(wildcard pdlua*-help.pd) \
+	$(addprefix pdlua/tutorial/examples/, pdx.lua pd-remote.el pd-remote.pd) \
+	pdlua-meta.pd
+
+# the 'pdlua' directory contains subdirectories (with subdirs),
+# so we need to list all of them
+datadirs = $(shell /usr/bin/find pdlua -type d)
 
 PDLIBBUILDER_DIR=.
 include $(PDLIBBUILDER_DIR)/Makefile.pdlibbuilder
 
-install: installplus
+$(luajit_lib):
+ifeq ($(system), Windows)
+	$(MAKE) -C $(luajit_dir) BUILDMODE=static XCFLAGS="-DLUAJIT_ENABLE_LUA52COMPAT"
+else
+	$(MAKE) -C $(luajit_dir) BUILDMODE=static CFLAGS="-fPIC" MACOSX_DEPLOYMENT_TARGET=10.7 XCFLAGS="-DLUAJIT_ENABLE_LUA52COMPAT"
+endif
 
-pdx_files = $(addprefix ./pdlua/tutorial/examples/, pdx.lua pd-remote.el pd-remote.pd)
-
-installplus:
-	$(INSTALL_DIR) -v "$(installpath)"
-	cp -r ./pdlua/ "${installpath}"/pdlua
-	cp pdlua-meta.pd "${installpath}"
-	cp $(pdx_files) "${installpath}"
+pdlua.$(extension): $(luajit_lib)

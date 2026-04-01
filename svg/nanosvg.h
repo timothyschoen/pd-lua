@@ -167,17 +167,17 @@ typedef struct NSVGimage
 } NSVGimage;
 
 // Parses SVG file from a file, returns SVG image as paths.
-NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi);
+static NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi);
 
 // Parses SVG file from a null terminated string, returns SVG image as paths.
 // Important note: changes the string.
-NSVGimage* nsvgParse(char* input, const char* units, float dpi);
+static NSVGimage* nsvgParse(char* input, const char* units, float dpi);
 
 // Duplicates a path.
-NSVGpath* nsvgDuplicatePath(NSVGpath* p);
+static NSVGpath* nsvgDuplicatePath(NSVGpath* p);
 
 // Deletes an image.
-void nsvgDelete(NSVGimage* image);
+static void nsvgDelete(NSVGimage* image);
 
 #ifndef NANOSVG_CPLUSPLUS
 #ifdef __cplusplus
@@ -284,7 +284,7 @@ static void nsvg__parseElement(char* s,
 
 	// Get attribs
 	while (!end && *s && nattr < NSVG_XML_MAX_ATTRIBS-3) {
-		char* name = NULL;
+		char* n = NULL;
 		char* value = NULL;
 
 		// Skip white space before the attrib name
@@ -294,7 +294,7 @@ static void nsvg__parseElement(char* s,
 			end = 1;
 			break;
 		}
-		name = s;
+		n = s;
 		// Find end of the attrib name.
 		while (*s && !nsvg__isspace(*s) && *s != '=') s++;
 		if (*s) { *s++ = '\0'; }
@@ -309,8 +309,8 @@ static void nsvg__parseElement(char* s,
 		if (*s) { *s++ = '\0'; }
 
 		// Store only well formed attributes
-		if (name && value) {
-			attr[nattr++] = name;
+		if (n && value) {
+			attr[nattr++] = n;
 			attr[nattr++] = value;
 		}
 	}
@@ -326,7 +326,7 @@ static void nsvg__parseElement(char* s,
 		(*endelCb)(ud, name);
 }
 
-int nsvg__parseXML(char* input,
+static int nsvg__parseXML(char* input,
 				   void (*startelCb)(void* ud, const char* el, const char** attr),
 				   void (*endelCb)(void* ud, const char* el),
 				   void (*contentCb)(void* ud, const char* s),
@@ -1289,7 +1289,7 @@ typedef struct NSVGNamedColor {
 	unsigned int color;
 } NSVGNamedColor;
 
-NSVGNamedColor nsvg__colors[] = {
+static NSVGNamedColor nsvg__colors[] = {
 
 	{ "red", NSVG_RGB(255, 0, 0) },
 	{ "green", NSVG_RGB( 0, 128, 0) },
@@ -1301,8 +1301,6 @@ NSVGNamedColor nsvg__colors[] = {
 	{ "grey", NSVG_RGB(128, 128, 128) },
 	{ "gray", NSVG_RGB(128, 128, 128) },
 	{ "white", NSVG_RGB(255, 255, 255) },
-
-#ifdef NANOSVG_ALL_COLOR_KEYWORDS
 	{ "aliceblue", NSVG_RGB(240, 248, 255) },
 	{ "antiquewhite", NSVG_RGB(250, 235, 215) },
 	{ "aqua", NSVG_RGB( 0, 255, 255) },
@@ -1440,7 +1438,6 @@ NSVGNamedColor nsvg__colors[] = {
 	{ "wheat", NSVG_RGB(245, 222, 179) },
 	{ "whitesmoke", NSVG_RGB(245, 245, 245) },
 	{ "yellowgreen", NSVG_RGB(154, 205, 50) },
-#endif
 };
 
 static unsigned int nsvg__parseColorName(const char* str)
@@ -1653,7 +1650,7 @@ static int nsvg__parseRotate(float* xform, const char* str)
 
 static void nsvg__parseTransform(float* xform, const char* str)
 {
-	float t[6];
+	float t[6] = {};
 	int len;
 	nsvg__xformIdentity(xform);
 	while (*str)
@@ -2991,7 +2988,7 @@ static void nsvg__createGradients(NSVGparser* p)
 	}
 }
 
-NSVGimage* nsvgParse(char* input, const char* units, float dpi)
+static NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 {
 	NSVGparser* p;
 	NSVGimage* ret = 0;
@@ -3018,7 +3015,7 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 	return ret;
 }
 
-NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
+static NSVGimage* nsvgParseFromFile(const char* filename, const char* units, float dpi)
 {
 	FILE* fp = NULL;
 	size_t size;
@@ -3047,7 +3044,7 @@ error:
 	return NULL;
 }
 
-NSVGpath* nsvgDuplicatePath(NSVGpath* p)
+static NSVGpath* nsvgDuplicatePath(NSVGpath* p)
 {
     NSVGpath* res = NULL;
 
@@ -3077,7 +3074,7 @@ error:
     return NULL;
 }
 
-void nsvgDelete(NSVGimage* image)
+static void nsvgDelete(NSVGimage* image)
 {
 	NSVGshape *snext, *shape;
 	if (image == NULL) return;
