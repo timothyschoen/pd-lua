@@ -141,11 +141,12 @@ pd._set_properties = function (object, method, args)
   end
 end
 
--- repaint method dispatcher
-pd._repaint = function (object)
+-- repaint method dispatcher. Invoked from the deferred GUI callback, so this
+-- must run the paint itself and not pd.Class:repaint (that only enqueues).
+pd._repaint = function (object, layer)
   local obj = pd._objects[object]
-  if nil ~= obj and type(obj.repaint) == "function" then
-    obj:repaint(0)
+  if nil ~= obj and type(obj._repaint_now) == "function" then
+    obj:_repaint_now(layer or 0)
   end
 end
 
@@ -534,6 +535,12 @@ function pd.Class:repaint(layer)
     self:error(string.format("repaint: invalid layer %s, must be number or nil", tostring(layer)))
     return
   end
+  -- One pending paint per object. Pd runs it from sys_queuegui, and holds
+  -- that queue while the GUI has not caught up (for example a save dialog).
+  pd._queue_repaint(self._object, layer or 0)
+end
+
+function pd.Class:_repaint_now(layer)
   if layer == nil or layer <= 1 then
     if type(self.paint) == "function" then
       local g = _gfx_internal.start_paint(self._object, 1);

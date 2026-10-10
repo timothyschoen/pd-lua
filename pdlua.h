@@ -22,7 +22,7 @@ typedef enum {SCALE, TRANSLATE} transform_type;
 typedef struct _gfx_transform
 {
     transform_type type;
-    float x, y;
+    t_float x, y;
 } gfx_transform;
 
 #define MAX_PENDING_PROPERTIES 128
@@ -65,7 +65,9 @@ typedef struct _pdlua_gfx
 #ifndef PLUGDATA
     char object_tag[128]; // Tcl/tk tag that is attached to all drawings
     char order_tag[64]; // Tag for invisible line, used to preserve correct object ordering
-    char current_item_tag[64]; // Tcl/tk tag that is only attached to the current drawing in progress
+#ifdef PURR_DATA
+    char current_item_tag[64]; // Per-item id for Purr Data's GUI
+#endif
     char **layer_tags;
     int num_layers;
     char *current_layer_tag;
@@ -77,6 +79,10 @@ typedef struct _pdlua_gfx
     int mouse_x, mouse_y, mouse_down, mouse_inside;
     int first_draw;
     int paint_generation;
+    /* One pending repaint, delivered by sys_queuegui. layer 0 means all layers. */
+    int repaint_queued;
+    int repaint_first;
+    int repaint_layer;
 #ifndef PURR_DATA
     uint64_t *images;
     uint32_t *images_last_used;

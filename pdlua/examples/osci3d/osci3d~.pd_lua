@@ -28,8 +28,8 @@ function osci3d:reset()
   self.DRAW_GRID = 1
   self.STROKE_WIDTH = 1
   self.ZOOM = 1
-  self.COLOR = {Colors.foreground}
-  self.BACKGROUND = {Colors.background}
+  self.COLOR = pd.fg_color()
+  self.BACKGROUND = pd.bg_color()
   self.PERSPECTIVE = 1
   self.rotationAngleX, self.rotationAngleY = 0, 0
   self.rotationStartAngleX, self.rotationStartAngleY = 0, 0

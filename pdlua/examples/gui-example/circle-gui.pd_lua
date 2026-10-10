@@ -7,8 +7,8 @@ function circle:initialize(sel, atoms)
     self.outlets = {DATA}
     self.range_start = -1
     self.range_end = 1
-    self.bg = Colors.background
-    self.fg = Colors.foreground
+    self.bg = pd.bg_color()
+    self.fg = pd.fg_color()
 
     self:set_size(127, 127)
     self:restore_state(atoms)
@@ -137,24 +137,25 @@ function circle:scale_value(value, min, max)
     return min + (max - min) * value
 end
 
+-- RGB table, or a legacy color id: 0 = default background, anything else = default foreground
+function circle:apply_color(g, color)
+    if type(color) == "table" then
+        g:set_color(table.unpack(color))
+    elseif color == 0 then
+        g:set_color(table.unpack(pd.bg_color()))
+    elseif type(color) == "number" then
+        g:set_color(table.unpack(pd.fg_color()))
+    end
+end
+
 function circle:paint(g)
     local width, height = self:get_size()
     local x = self.slider_position_x * width
     local y = self.slider_position_y * height
 
-   if type(self.bg) == "number" then
-        g:set_color(self.bg)
-    elseif type(self.bg) == "table" then
-        g:set_color(table.unpack(self.bg))
-    end
-
+    self:apply_color(g, self.bg)
     g:fill_all()
-
-    if type(self.fg) == "number" then
-        g:set_color(self.fg)
-    elseif type(self.fg) == "table" then
-        g:set_color(table.unpack(self.fg))
-    end
+    self:apply_color(g, self.fg)
 
     g:fill_ellipse(x - 3.5, y - 3.5, 7, 7)
     g:stroke_ellipse(1, 1, width - 2, height - 2, 1)

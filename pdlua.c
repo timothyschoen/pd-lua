@@ -917,6 +917,7 @@ static void pdlua_vis(t_gobj *z, t_glist *glist, int vis){
         pdlua_gfx_repaint(x, 1);
     }
     else {
+        pdlua_gfx_cancel_repaint(x);
         pdlua_gfx_clear(x, -1, 1);
     }
 }
@@ -2115,6 +2116,7 @@ static int pdlua_object_free(lua_State *L)
 
         if (o)
         {
+            pdlua_gfx_cancel_repaint(o);
             pdlua_gfx_free(&o->gfx);
             pdlua_properties_free(&o->properties);
 

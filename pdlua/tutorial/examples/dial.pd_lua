@@ -9,8 +9,8 @@ function dial:initialize(sel, atoms)
    -- normalized phase angle (divided by pi, 0 = center up, +/- 1 = center down)
    self.phase = 0
    -- foreground and background colors
-   self.bg = Colors.background
-   self.fg = Colors.foreground
+   self.bg = pd.bg_color()
+   self.fg = pd.fg_color()
    -- object size
    self:set_size(127, 127)
    -- restore state from creation arguments
@@ -150,15 +150,17 @@ function dial:paint(g)
    local x, y = self:tip()
 
    -- standard object border, fill with bg color
-   g:set_color(0)
+   g:set_color(table.unpack(pd.bg_color()))
    g:fill_all()
 
    -- helper function to set a color value
    function set_color(x)
       if type(x) == "table" then
 	 g:set_color(table.unpack(x))
+      elseif x == 0 then
+	 g:set_color(table.unpack(pd.bg_color()))
       elseif type(x) == "number" then
-	 g:set_color(x)
+	 g:set_color(table.unpack(pd.fg_color()))
       end
    end
 
