@@ -635,8 +635,16 @@ static int pdlua_properties_addtext(lua_State *L)
 
     pdgui_vmess(0, "rss", "set", text_var, init_value);
 
+    // Escape $ characters in the same way pure-data does to prevent tcl/tk errors
+    pdgui_vmess(0, "r",
+    "proc pdlua_send_text {receiver method var} {\n"
+    "    set text [string map [list \"\\\\\" \"\\\\\\\\\" \"\\$\" \"\\\\\\$\" \" \" \"\\\\ \""
+    " \",\" \"\\\\,\" \";\" \"\\\\;\"] [set $var]]\n"
+    "    pdsend \"$receiver dialog textbox $method $text\"\n"
+    "}\n");
+
     // Command to send it to pd
-    snprintf(pdsend, MAXPDSTRING, "eval pdsend [concat %s dialog textbox %s $%s]",
+    snprintf(pdsend, MAXPDSTRING, "pdlua_send_text %s %s %s",
              pdlua->properties.properties_receiver->s_name, method, text_var);
 
     // container_id for button to set and text input
@@ -1020,6 +1028,11 @@ static void pdlua_properties_apply(t_pdlua *o)
                 lua_pushinteger(L, b); lua_rawseti(L, -2, 3);
             }
         }
+        else if (entry->argc == 0)
+        {
+            // an empty text field (see pdlua_properties_receiver)
+            lua_pushstring(L, "");
+        }
         else
         {
             if (entry->argv[0].a_type == A_FLOAT)
@@ -1056,6 +1069,9 @@ static void pdlua_properties_receiver(t_pdlua *o, t_symbol *MAYBE_UNUSED(s), int
     if (argc < 2) return;
 
     const char *method = atom_getsymbol(argv + 1)->s_name;
+
+    // An emptied field sends no value
+    if (argc < 3 && strcmp(guitype, "textbox") != 0) return;
 
     // Overwrite existing entry for the same method so only the latest value is kept
     t_pending_property *entry = NULL;
