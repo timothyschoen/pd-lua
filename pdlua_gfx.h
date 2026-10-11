@@ -1101,7 +1101,11 @@ static int set_color(lua_State *L) {
     int g = luaL_checknumber(L, 2);
     int b = luaL_checknumber(L, 3);
 #ifndef PURR_DATA
-    // AFAIK, alpha is not supported in tcl/tk
+    // Alpha is not supported in tcl/tk, so handle the case for full transparency by passing an empty string to "-background"
+    if (luaL_optnumber(L, 4, 1.0f) <= 0.0f) {
+        gfx->current_color[0] = '\0';
+        return 0;
+    }
     snprintf(gfx->current_color, 8, "#%02X%02X%02X", r, g, b);
     gfx->current_color[7] = '\0';
 #else
