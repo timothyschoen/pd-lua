@@ -775,11 +775,11 @@ static t_pdlua *pdlua_new
             strcat(buf, LUA_FILE_EXTENSION);
             reader.fd = fd;
             n = lua_gettop(__L());
-#if LUA_VERSION_NUM	< 502
+#if LUA_VERSION_NUM < 502
             if (lua_load(__L(), pdlua_reader, &reader, buf))
 #else // 5.2 style
             if (lua_load(__L(), pdlua_reader, &reader, buf, NULL))
-#endif // LUA_VERSION_NUM	< 502
+#endif // LUA_VERSION_NUM < 502
             {
                 close(fd);
                 pdlua_clearrequirepath(__L());
@@ -2242,11 +2242,11 @@ static t_atom *pdlua_popatomtable
     PDLUA_DEBUG("pdlua_popatomtable: stack top %d", lua_gettop(L));
     if (lua_istable(L, -1))
     {
-#if LUA_VERSION_NUM	< 502
+#if LUA_VERSION_NUM < 502
         *count = lua_objlen(L, -1);
 #else // 5.2 style
         *count = lua_rawlen(L, -1);
-#endif // LUA_VERSION_NUM	< 502
+#endif // LUA_VERSION_NUM < 502
         if (*count > 0) atoms = malloc(*count * sizeof(t_atom));
         i = 0;
         lua_pushnil(L);
@@ -2634,6 +2634,50 @@ static int pdlua_fg_color(lua_State *L)
     return 1;
 }
 
+/** request selection color */
+static int pdlua_sel_color(lua_State *L)
+/**< Lua interpreter state.
+ * \par Outputs:
+ * \li \c 1 table or rgb values
+* */
+{
+#if !defined(PURR_DATA) && !defined(PLUGDATA)
+    uint32_t color = (uint32_t)((THISGUI->i_selectcolor) << 8 | 0xFF);
+#else
+    uint32_t color = 0xFFFFFFFF;
+#endif
+    lua_newtable(L);
+    lua_pushinteger(L, (color >> 24) & 0xFF);
+    lua_rawseti(L, -2, 1);
+    lua_pushinteger(L, (color >> 16) & 0xFF);
+    lua_rawseti(L, -2, 2);
+    lua_pushinteger(L, (color >> 8) & 0xFF);
+    lua_rawseti(L, -2, 3);
+    return 1;
+}
+
+/** request graph-on-parent color */
+static int pdlua_gop_color(lua_State *L)
+/**< Lua interpreter state.
+ * \par Outputs:
+ * \li \c 1 table or rgb values
+* */
+{
+#if !defined(PURR_DATA) && !defined(PLUGDATA)
+    uint32_t color = (uint32_t)((THISGUI->i_gopcolor) << 8 | 0xFF);
+#else
+    uint32_t color = 0xFFFFFFFF;
+#endif
+    lua_newtable(L);
+    lua_pushinteger(L, (color >> 24) & 0xFF);
+    lua_rawseti(L, -2, 1);
+    lua_pushinteger(L, (color >> 16) & 0xFF);
+    lua_rawseti(L, -2, 2);
+    lua_pushinteger(L, (color >> 8) & 0xFF);
+    lua_rawseti(L, -2, 3);
+    return 1;
+}
+
 /** request pd flavour */
 static int pdlua_flavor(lua_State *L)
 /**< Lua interpreter state.
@@ -2795,11 +2839,11 @@ static int pdlua_dofilex(lua_State *L)
                 PDLUA_DEBUG("pdlua_dofilex path is %s", buf);
                 pdlua_setrequirepath(L, buf);
                 reader.fd = fd;
-#if LUA_VERSION_NUM	< 502
+#if LUA_VERSION_NUM < 502
                 if (lua_load(L, pdlua_reader, &reader, filename))
 #else // 5.2 style
                 if (lua_load(L, pdlua_reader, &reader, filename, NULL))
-#endif // LUA_VERSION_NUM	< 502
+#endif // LUA_VERSION_NUM < 502
                 {
                     close(fd);
                     pdlua_clearrequirepath(L);
@@ -2866,11 +2910,11 @@ static int pdlua_dofile(lua_State *L)
                 //pdlua_setpathname(o, buf);/* change the scriptname to include its path */
                 pdlua_setrequirepath(L, buf);
                 reader.fd = fd;
-#if LUA_VERSION_NUM	< 502
+#if LUA_VERSION_NUM < 502
                 if (lua_load(L, pdlua_reader, &reader, filename))
 #else // 5.2 style
                 if (lua_load(L, pdlua_reader, &reader, filename, NULL))
-#endif // LUA_VERSION_NUM	< 502
+#endif // LUA_VERSION_NUM < 502
                 {
                     close(fd);
                     pdlua_clearrequirepath(L);
@@ -3075,6 +3119,12 @@ static void pdlua_init(lua_State *L)
     lua_pushstring(L, "fg_color");
     lua_pushcfunction(L, pdlua_fg_color);
     lua_settable(L, -3);
+    lua_pushstring(L, "sel_color");
+    lua_pushcfunction(L, pdlua_sel_color);
+    lua_settable(L, -3);
+    lua_pushstring(L, "gop_color");
+    lua_pushcfunction(L, pdlua_gop_color);
+    lua_settable(L, -3);
     lua_pushstring(L, "flavor");
     lua_pushcfunction(L, pdlua_flavor);
     lua_settable(L, -3);
@@ -3133,11 +3183,11 @@ static int pdlua_loader_fromfd
     // we want to have the filename with extension as the name of the chunk
     char filename[MAXPDSTRING];
     snprintf(filename, MAXPDSTRING, "%s.pd_lua", name);
-#if LUA_VERSION_NUM	< 502
+#if LUA_VERSION_NUM < 502
     if (lua_load(__L(), pdlua_reader, &reader, filename) || lua_pcall(__L(), 0, 0, 0))
 #else // 5.2 style
     if (lua_load(__L(), pdlua_reader, &reader, filename, NULL) || lua_pcall(__L(), 0, 0, 0))
-#endif // LUA_VERSION_NUM	< 502
+#endif // LUA_VERSION_NUM < 502
     {
       mylua_error(__L(), NULL, NULL);
       pdlua_clearrequirepath(__L());
@@ -3409,7 +3459,7 @@ void pdlua_setup(void)
 #endif
 {
     char                luaversionStr[MAXPDSTRING];
-#if LUA_VERSION_NUM	< 504
+#if LUA_VERSION_NUM    < 504
     const lua_Number    *luaversion = lua_version (NULL);
 #else
     const lua_Number    luavers = lua_version (NULL), *luaversion = &luavers;
