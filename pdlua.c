@@ -2641,10 +2641,10 @@ static int pdlua_sel_color(lua_State *L)
  * \li \c 1 table or rgb values
 * */
 {
-#if !defined(PURR_DATA) && !defined(PLUGDATA)
+#ifndef PURR_DATA
     uint32_t color = (uint32_t)((THISGUI->i_selectcolor) << 8 | 0xFF);
 #else
-    uint32_t color = 0xFFFFFFFF;
+    uint32_t color = 0xFFD97833;
 #endif
     lua_newtable(L);
     lua_pushinteger(L, (color >> 24) & 0xFF);
@@ -2663,10 +2663,10 @@ static int pdlua_gop_color(lua_State *L)
  * \li \c 1 table or rgb values
 * */
 {
-#if !defined(PURR_DATA) && !defined(PLUGDATA)
+#ifndef PURR_DATA
     uint32_t color = (uint32_t)((THISGUI->i_gopcolor) << 8 | 0xFF);
 #else
-    uint32_t color = 0xFFFFFFFF;
+    uint32_t color = 0xFFFF0000;
 #endif
     lua_newtable(L);
     lua_pushinteger(L, (color >> 24) & 0xFF);
